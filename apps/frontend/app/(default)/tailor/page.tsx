@@ -466,6 +466,7 @@ export default function TailorPage() {
           onConfirm={handleConfirmChanges}
           diffSummary={pendingResult?.data?.diff_summary}
           detailedChanges={pendingResult?.data?.detailed_changes}
+          semanticMatch={pendingResult?.data?.semantic_match}
           errorMessage={diffConfirmError ?? undefined}
         />
       )}

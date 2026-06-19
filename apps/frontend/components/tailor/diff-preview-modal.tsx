@@ -1,13 +1,23 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, CheckCircle, X, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle,
+  X,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  TrendingUp,
+  AlertCircle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useTranslations } from '@/lib/i18n';
 import type {
   ResumeDiffSummary,
   ResumeFieldDiff,
+  SemanticMatchResult,
 } from '@/components/common/resume_previewer_context';
 
 interface DiffPreviewModalProps {
@@ -18,6 +28,7 @@ interface DiffPreviewModalProps {
   onConfirm: () => void;
   diffSummary?: ResumeDiffSummary;
   detailedChanges?: ResumeFieldDiff[];
+  semanticMatch?: SemanticMatchResult | null;
   errorMessage?: string;
 }
 
@@ -29,6 +40,7 @@ export function DiffPreviewModal({
   onConfirm,
   diffSummary,
   detailedChanges,
+  semanticMatch,
   errorMessage,
 }: DiffPreviewModalProps) {
   const { t } = useTranslations();
@@ -137,166 +149,171 @@ export function DiffPreviewModal({
           </p>
         </DialogHeader>
 
-        {/* Summary cards */}
-        <div className="border-2 border-black bg-white p-4 mt-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-3 h-3 bg-primary"></div>
-            <h3 className="font-mono text-sm font-bold uppercase tracking-wider">
-              {t('tailor.diffModal.summary')}
-            </h3>
-          </div>
+        {/* Scrollable body — contains everything between header and footer */}
+        <div className="flex-1 min-h-0 overflow-y-auto mt-4 space-y-4 pr-1">
+          {/* Summary cards */}
+          <div className="border-2 border-black bg-white p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-3 h-3 bg-primary"></div>
+              <h3 className="font-mono text-sm font-bold uppercase tracking-wider">
+                {t('tailor.diffModal.summary')}
+              </h3>
+            </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            <StatCard
-              label={t('tailor.diffModal.skillsAdded')}
-              value={diffSummary.skills_added}
-              variant="success"
-            />
-            <StatCard
-              label={t('tailor.diffModal.skillsRemoved')}
-              value={diffSummary.skills_removed}
-              variant="warning"
-            />
-            <StatCard
-              label={t('tailor.diffModal.certificationsAdded')}
-              value={diffSummary.certifications_added}
-              variant="info"
-            />
-            <StatCard
-              label={t('tailor.diffModal.descriptionsModified')}
-              value={diffSummary.descriptions_modified}
-              variant="info"
-            />
-            <StatCard
-              label={t('tailor.diffModal.highRiskChanges')}
-              value={diffSummary.high_risk_changes}
-              variant={diffSummary.high_risk_changes > 0 ? 'danger' : 'success'}
-            />
-          </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              <StatCard
+                label={t('tailor.diffModal.skillsAdded')}
+                value={diffSummary.skills_added}
+                variant="success"
+              />
+              <StatCard
+                label={t('tailor.diffModal.skillsRemoved')}
+                value={diffSummary.skills_removed}
+                variant="warning"
+              />
+              <StatCard
+                label={t('tailor.diffModal.certificationsAdded')}
+                value={diffSummary.certifications_added}
+                variant="info"
+              />
+              <StatCard
+                label={t('tailor.diffModal.descriptionsModified')}
+                value={diffSummary.descriptions_modified}
+                variant="info"
+              />
+              <StatCard
+                label={t('tailor.diffModal.highRiskChanges')}
+                value={diffSummary.high_risk_changes}
+                variant={diffSummary.high_risk_changes > 0 ? 'danger' : 'success'}
+              />
+            </div>
 
-          {diffSummary.high_risk_changes > 0 && (
-            <div className="mt-4 border-2 border-warning bg-[#FFF7ED] p-3 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
-              <div>
-                <p className="font-mono text-xs font-bold uppercase text-[#C2410C]">
-                  {t('tailor.diffModal.warningTitle', {
-                    count: diffSummary.high_risk_changes,
-                  })}
-                </p>
-                <p className="font-mono text-xs text-[#C2410C] mt-1">
-                  {t('tailor.diffModal.warningMessage')}
-                </p>
+            {diffSummary.high_risk_changes > 0 && (
+              <div className="mt-4 border-2 border-warning bg-[#FFF7ED] p-3 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-mono text-xs font-bold uppercase text-[#C2410C]">
+                    {t('tailor.diffModal.warningTitle', {
+                      count: diffSummary.high_risk_changes,
+                    })}
+                  </p>
+                  <p className="font-mono text-xs text-[#C2410C] mt-1">
+                    {t('tailor.diffModal.warningMessage')}
+                  </p>
+                </div>
               </div>
+            )}
+          </div>
+
+          {errorMessage && (
+            <div className="border-2 border-red-600 bg-red-50 p-3 font-mono text-xs text-red-700">
+              {errorMessage}
             </div>
           )}
-        </div>
 
-        {errorMessage && (
-          <div className="mt-4 border-2 border-red-600 bg-red-50 p-3 font-mono text-xs text-red-700">
-            {errorMessage}
+          {/* Semantic match panel */}
+          {semanticMatch && <SemanticMatchPanel match={semanticMatch} />}
+          {/* Detailed changes list */}
+          <div className="space-y-4">
+            {summaryChanges.length > 0 && (
+              <ChangeSection
+                title={t('tailor.diffModal.summaryChanges')}
+                count={summaryChanges.length}
+                isExpanded={expandedSections.has('summary')}
+                onToggle={() => toggleSection('summary')}
+              >
+                {summaryChanges.map((change, idx) => (
+                  <ChangeItem key={idx} change={change} />
+                ))}
+              </ChangeSection>
+            )}
+
+            {/* Skill changes */}
+            {skillChanges.length > 0 && (
+              <ChangeSection
+                title={t('tailor.diffModal.skillChanges')}
+                count={skillChanges.length}
+                isExpanded={expandedSections.has('skills')}
+                onToggle={() => toggleSection('skills')}
+              >
+                {skillChanges.map((change, idx) => (
+                  <ChangeItem key={idx} change={change} />
+                ))}
+              </ChangeSection>
+            )}
+
+            {/* Experience changes */}
+            {experienceChanges.length > 0 && (
+              <ChangeSection
+                title={t('tailor.diffModal.experienceChanges')}
+                count={experienceChanges.length}
+                isExpanded={expandedSections.has('experience')}
+                onToggle={() => toggleSection('experience')}
+              >
+                {experienceChanges.map((change, idx) => (
+                  <ChangeItem key={idx} change={change} />
+                ))}
+              </ChangeSection>
+            )}
+
+            {/* Description changes */}
+            {descChanges.length > 0 && (
+              <ChangeSection
+                title={t('tailor.diffModal.descriptionChanges')}
+                count={descChanges.length}
+                isExpanded={expandedSections.has('descriptions')}
+                onToggle={() => toggleSection('descriptions')}
+              >
+                {descChanges.map((change, idx) => (
+                  <ChangeItem key={idx} change={change} />
+                ))}
+              </ChangeSection>
+            )}
+
+            {/* Education changes */}
+            {educationChanges.length > 0 && (
+              <ChangeSection
+                title={t('tailor.diffModal.educationChanges')}
+                count={educationChanges.length}
+                isExpanded={expandedSections.has('education')}
+                onToggle={() => toggleSection('education')}
+              >
+                {educationChanges.map((change, idx) => (
+                  <ChangeItem key={idx} change={change} />
+                ))}
+              </ChangeSection>
+            )}
+
+            {/* Project changes */}
+            {projectChanges.length > 0 && (
+              <ChangeSection
+                title={t('tailor.diffModal.projectChanges')}
+                count={projectChanges.length}
+                isExpanded={expandedSections.has('project')}
+                onToggle={() => toggleSection('project')}
+              >
+                {projectChanges.map((change, idx) => (
+                  <ChangeItem key={idx} change={change} />
+                ))}
+              </ChangeSection>
+            )}
+
+            {/* Certification changes */}
+            {certChanges.length > 0 && (
+              <ChangeSection
+                title={t('tailor.diffModal.certificationChanges')}
+                count={certChanges.length}
+                isExpanded={expandedSections.has('certifications')}
+                onToggle={() => toggleSection('certifications')}
+              >
+                {certChanges.map((change, idx) => (
+                  <ChangeItem key={idx} change={change} />
+                ))}
+              </ChangeSection>
+            )}
           </div>
-        )}
-
-        {/* Detailed changes list */}
-        <div className="flex-1 min-h-0 overflow-y-auto mt-4 space-y-4">
-          {/* Summary changes */}
-          {summaryChanges.length > 0 && (
-            <ChangeSection
-              title={t('tailor.diffModal.summaryChanges')}
-              count={summaryChanges.length}
-              isExpanded={expandedSections.has('summary')}
-              onToggle={() => toggleSection('summary')}
-            >
-              {summaryChanges.map((change, idx) => (
-                <ChangeItem key={idx} change={change} />
-              ))}
-            </ChangeSection>
-          )}
-
-          {/* Skill changes */}
-          {skillChanges.length > 0 && (
-            <ChangeSection
-              title={t('tailor.diffModal.skillChanges')}
-              count={skillChanges.length}
-              isExpanded={expandedSections.has('skills')}
-              onToggle={() => toggleSection('skills')}
-            >
-              {skillChanges.map((change, idx) => (
-                <ChangeItem key={idx} change={change} />
-              ))}
-            </ChangeSection>
-          )}
-
-          {/* Experience changes */}
-          {experienceChanges.length > 0 && (
-            <ChangeSection
-              title={t('tailor.diffModal.experienceChanges')}
-              count={experienceChanges.length}
-              isExpanded={expandedSections.has('experience')}
-              onToggle={() => toggleSection('experience')}
-            >
-              {experienceChanges.map((change, idx) => (
-                <ChangeItem key={idx} change={change} />
-              ))}
-            </ChangeSection>
-          )}
-
-          {/* Description changes */}
-          {descChanges.length > 0 && (
-            <ChangeSection
-              title={t('tailor.diffModal.descriptionChanges')}
-              count={descChanges.length}
-              isExpanded={expandedSections.has('descriptions')}
-              onToggle={() => toggleSection('descriptions')}
-            >
-              {descChanges.map((change, idx) => (
-                <ChangeItem key={idx} change={change} />
-              ))}
-            </ChangeSection>
-          )}
-
-          {/* Education changes */}
-          {educationChanges.length > 0 && (
-            <ChangeSection
-              title={t('tailor.diffModal.educationChanges')}
-              count={educationChanges.length}
-              isExpanded={expandedSections.has('education')}
-              onToggle={() => toggleSection('education')}
-            >
-              {educationChanges.map((change, idx) => (
-                <ChangeItem key={idx} change={change} />
-              ))}
-            </ChangeSection>
-          )}
-
-          {/* Project changes */}
-          {projectChanges.length > 0 && (
-            <ChangeSection
-              title={t('tailor.diffModal.projectChanges')}
-              count={projectChanges.length}
-              isExpanded={expandedSections.has('project')}
-              onToggle={() => toggleSection('project')}
-            >
-              {projectChanges.map((change, idx) => (
-                <ChangeItem key={idx} change={change} />
-              ))}
-            </ChangeSection>
-          )}
-
-          {/* Certification changes */}
-          {certChanges.length > 0 && (
-            <ChangeSection
-              title={t('tailor.diffModal.certificationChanges')}
-              count={certChanges.length}
-              isExpanded={expandedSections.has('certifications')}
-              onToggle={() => toggleSection('certifications')}
-            >
-              {certChanges.map((change, idx) => (
-                <ChangeItem key={idx} change={change} />
-              ))}
-            </ChangeSection>
-          )}
         </div>
+        {/* end scrollable body */}
 
         {/* Action buttons */}
         <div className="flex justify-between items-center pt-4 border-t-2 border-black bg-white -mx-6 -mb-6 px-6 py-4">
@@ -332,6 +349,155 @@ export function DiffPreviewModal({
   );
 }
 
+// ── Semantic match panel ──────────────────────────────────────────────────
+
+interface SemanticMatchPanelProps {
+  match: SemanticMatchResult;
+}
+
+function SemanticMatchPanel({ match }: SemanticMatchPanelProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  const scoreColor = (score: number) => {
+    if (score >= 70) return 'text-success';
+    if (score >= 45) return 'text-warning';
+    return 'text-destructive';
+  };
+
+  const barColor = (score: number) => {
+    if (score >= 70) return 'bg-success';
+    if (score >= 45) return 'bg-warning';
+    return 'bg-destructive';
+  };
+
+  const overallLabel = (score: number) => {
+    if (score >= 75) return 'Strong match';
+    if (score >= 55) return 'Moderate match';
+    if (score >= 35) return 'Partial match';
+    return 'Weak match';
+  };
+
+  return (
+    <div className="mt-4 border-2 border-black bg-white">
+      {/* Header row */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between p-4 hover:bg-paper-tint"
+      >
+        <div className="flex items-center gap-3">
+          <TrendingUp className="w-4 h-4 text-primary" />
+          <span className="font-mono text-sm font-bold uppercase tracking-wider">
+            Semantic Match Analysis
+          </span>
+          <span className="font-mono text-xs text-ink-soft"> embedding cosine similarity</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className={`font-mono text-2xl font-bold ${scoreColor(match.overall_score)}`}>
+            {match.overall_score.toFixed(0)}
+            <span className="text-sm font-normal text-ink-soft">/100</span>
+          </span>
+          <span className="font-mono text-xs text-ink-soft uppercase">
+            {overallLabel(match.overall_score)}
+          </span>
+          {expanded ? (
+            <ChevronDown className="w-4 h-4 text-ink-soft" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-ink-soft" />
+          )}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t-2 border-black p-4 space-y-5">
+          {/* Section bars */}
+          {match.section_scores.length > 0 && (
+            <div>
+              <p className="font-mono text-xs font-bold uppercase tracking-wider text-ink-soft mb-3">
+                Section Scores
+              </p>
+              <div className="space-y-2">
+                {match.section_scores.map((s) => (
+                  <div key={s.section} className="flex items-center gap-3">
+                    <span className="font-mono text-xs w-20 capitalize text-ink-soft shrink-0">
+                      {s.section}
+                    </span>
+                    <div className="flex-1 h-2 bg-gray-100 border border-black">
+                      <div
+                        className={`h-full ${barColor(s.score)} transition-all`}
+                        style={{ width: `${Math.min(s.score, 100)}%` }}
+                      />
+                    </div>
+                    <span
+                      className={`font-mono text-xs font-bold w-10 text-right ${scoreColor(s.score)}`}
+                    >
+                      {s.score.toFixed(0)}
+                    </span>
+                    <span className="font-mono text-xs text-ink-soft w-10 text-right">
+                      {(s.weight * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Fit summary */}
+          {match.fit_summary && (
+            <div className="border border-black bg-paper-tint p-3">
+              <p className="font-mono text-xs text-ink-soft leading-relaxed">{match.fit_summary}</p>
+            </div>
+          )}
+
+          {/* Strengths */}
+          {match.strengths.length > 0 && (
+            <div>
+              <p className="font-mono text-xs font-bold uppercase tracking-wider text-success mb-2">
+                ✓ Strengths
+              </p>
+              <ul className="space-y-1">
+                {match.strengths.map((s, i) => (
+                  <li key={i} className="font-mono text-xs text-ink-soft flex gap-2">
+                    <span className="text-success shrink-0">+</span>
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Gaps */}
+          {match.gaps.length > 0 && (
+            <div>
+              <p className="font-mono text-xs font-bold uppercase tracking-wider text-warning mb-2">
+                △ Gaps
+              </p>
+              <ul className="space-y-1">
+                {match.gaps.map((g, i) => (
+                  <li key={i} className="font-mono text-xs text-ink-soft flex gap-2">
+                    <AlertCircle className="w-3 h-3 text-warning shrink-0 mt-0.5" />
+                    {g}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Recommendation */}
+          {match.recommendation && (
+            <div className="border-t border-gray-200 pt-3">
+              <p className="font-mono text-xs font-bold uppercase tracking-wider text-ink-soft mb-1">
+                Recommendation
+              </p>
+              <p className="font-mono text-xs text-ink-soft italic">{match.recommendation}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Helper component: stat card ───────────────────────────────────────────
 // Helper component: stat card
 interface StatCardProps {
   label: string;

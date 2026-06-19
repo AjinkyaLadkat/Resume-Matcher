@@ -27,6 +27,7 @@ import {
   type ResumeListItem,
 } from '@/lib/api/resume';
 import { useStatusCache } from '@/lib/context/status-cache';
+import { SemanticScoreBadge } from '@/components/common/semantic-score-card';
 
 type ProcessingStatus = 'pending' | 'processing' | 'ready' | 'failed' | 'loading';
 
@@ -485,6 +486,12 @@ export default function DashboardPage() {
                     date: formatDate(resume.updated_at || resume.created_at),
                   })}{' '}
                 </CardDescription>
+                {/* Semantic alignment score — shown when analysis has been persisted */}
+                {resume.overall_semantic_score != null && (
+                  <div className="mt-2">
+                    <SemanticScoreBadge score={resume.overall_semantic_score} />
+                  </div>
+                )}
               </div>
             </Card>
           );

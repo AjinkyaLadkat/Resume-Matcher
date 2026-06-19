@@ -390,6 +390,8 @@ class ResumeFetchData(BaseModel):
     outreach_message: str | None = None
     parent_id: str | None = None  # For determining if resume is tailored
     title: str | None = None
+    # Persisted semantic match result (stored at confirm/improve time)
+    semantic_match: dict[str, Any] | None = None
 
 
 class ResumeFetchResponse(BaseModel):
@@ -410,6 +412,8 @@ class ResumeSummary(BaseModel):
     created_at: str
     updated_at: str
     title: str | None = None
+    # Lightweight scalar from stored semantic_match — avoids sending full vectors to list endpoint
+    overall_semantic_score: float | None = None
 
 
 class ResumeListResponse(BaseModel):
@@ -532,6 +536,12 @@ class ImproveResumeData(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     refinement_attempted: bool = False
     refinement_successful: bool = False
+
+    # Semantic matching result (Phase 1 upgrade — optional, non-breaking)
+    semantic_match: "SemanticMatchResult | None" = Field(
+        default=None,
+        description="Embedding-based semantic alignment scores and LLM fit analysis",
+    )
 
 
 class ImproveResumeResponse(BaseModel):
@@ -761,3 +771,18 @@ class ImproveDiffResult(BaseModel):
 
     changes: list[ResumeChange] = Field(default_factory=list)
     strategy_notes: str = Field(default="")
+
+
+# ── Forward reference resolution ──────────────────────────────────────────
+# SemanticMatchResult is defined in schemas/semantic.py (separate module to
+# keep the semantic upgrade isolated). We resolve the forward reference here
+# so Pydantic v2 can build the complete ImproveResumeData JSON schema.
+def _rebuild_with_semantic() -> None:
+    try:
+        from app.schemas.semantic import SemanticMatchResult  # noqa: F401
+        ImproveResumeData.model_rebuild()
+    except Exception:  # pragma: no cover
+        pass
+
+
+_rebuild_with_semantic()

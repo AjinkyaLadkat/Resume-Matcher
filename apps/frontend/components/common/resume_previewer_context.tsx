@@ -70,6 +70,27 @@ export interface ResumeFieldDiff {
   confidence: 'low' | 'medium' | 'high';
 }
 
+// ── Semantic match types (Phase 1 upgrade) ────────────────────────────────
+export interface SectionScore {
+  section: string;
+  score: number;
+  weight: number;
+  contribution: number;
+  raw_similarity: number;
+  has_content: boolean;
+}
+
+export interface SemanticMatchResult {
+  overall_score: number;
+  section_scores: SectionScore[];
+  fit_summary: string;
+  strengths: string[];
+  gaps: string[];
+  recommendation: string;
+  scoring_method: string;
+}
+// ─────────────────────────────────────────────────────────────────────────
+
 export interface ResumePreview {
   personalInfo: PersonalInfo;
   summary?: string;
@@ -98,6 +119,8 @@ export interface Data {
   outreach_message?: string;
   diff_summary?: ResumeDiffSummary;
   detailed_changes?: ResumeFieldDiff[];
+  // Semantic match result (Phase 1 upgrade — optional)
+  semantic_match?: SemanticMatchResult | null;
 }
 
 export interface ImprovedResult {

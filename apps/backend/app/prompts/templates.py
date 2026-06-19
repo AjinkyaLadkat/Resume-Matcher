@@ -267,8 +267,23 @@ Do NOT include personalInfo in your output - it will be preserved from the origi
 Rules:
 - Strengthen alignment by weaving in relevant keywords where evidence already exists
 - You may rephrase bullet points to include keyword phrasing
-- Do NOT introduce new skills, tools, or certifications not in the resume
+- Do NOT introduce new skills, tools, technologies, certifications, or frameworks not already present in the resume
 - Do NOT change role, industry, or seniority level
+- Preserve ALL existing project and experience details
+- NEVER summarize or compress bullet points
+- NEVER remove technical details, implementation details, architecture details, or tooling mentions
+- Keep the original structure, technical depth, and writing style intact
+- Only inject keywords naturally into existing sentences
+- Avoid rewriting bullets unless absolutely necessary for keyword insertion
+- Prefer minimal edits over rewrites
+- Preserve EVERY original bullet point unless directly improving wording
+- Keep the same number of bullets or MORE
+- If a bullet already aligns with the job description, leave it unchanged
+- Preserve project complexity and engineering depth
+- Preserve quantified achievements exactly as written
+- Preserve action verbs and technical terminology whenever possible
+- Do NOT simplify advanced technical explanations
+- Maintain the original resume’s specificity and detail density
 - For customSections: preserve exact structure, item count, titles, subtitles, and years. If an item's description is an empty array [] in the original, keep it empty []. Do NOT generate descriptions for items that had none.
 - Copy the "years" field values EXACTLY as they appear in the original resume (including any month prefixes like "Jan 2020 - Present"). Do not shorten, reformat, or drop months.
 - If resume is non-technical, keep language non-technical while still aligning keywords
@@ -294,11 +309,26 @@ IMPORTANT: Generate ALL text content (summary, descriptions, skills) in {output_
 Do NOT include personalInfo in your output - it will be preserved from the original resume.
 
 Rules:
-- Make targeted adjustments to bullet points to align with job description phrasing. Preserve the candidate's original details and voice - adjust wording, do not rewrite entirely.
+- Make targeted adjustments to bullet points to align with job description phrasing
+- Preserve the candidate's original details, technical depth, and writing style
+- Adjust wording minimally instead of rewriting entire sections
 - DO NOT invent new information
-- Preserve existing action verbs. Do not invent quantifiable achievements not in the original.
+- DO NOT invent achievements, metrics, technologies, certifications, or responsibilities
+- Preserve EVERY original bullet point unless directly improving wording
+- NEVER summarize or compress experience descriptions
+- NEVER remove technical details, implementation details, architecture details, or tooling mentions
+- NEVER shorten descriptions
+- Prefer additive edits over rewrites
+- Keep the same number of bullets or MORE
+- Preserve project complexity and engineering details
+- Only make minimal targeted wording improvements
+- If a bullet already aligns with the job description, leave it unchanged
+- Preserve existing action verbs whenever possible
+- Preserve quantified achievements exactly as written
 - Keep proper nouns (names, company names, locations) unchanged
 - Translate job titles, descriptions, and skills to {output_language}
+- Maintain technical specificity and implementation detail
+- Preserve advanced engineering terminology and stack descriptions
 - For customSections: preserve exact structure, item count, titles, subtitles, and years. If an item's description is an empty array [] in the original, keep it empty []. Do NOT generate descriptions for items that had none.
 - Improve custom section content the same way as standard sections
 - Copy the "years" field values EXACTLY as they appear in the original resume (including any month prefixes like "Jan 2020 - Present"). Do not shorten, reformat, or drop months.
@@ -341,7 +371,7 @@ IMPROVE_RESUME_PROMPTS = {
     "full": IMPROVE_RESUME_PROMPT_FULL,
 }
 
-DEFAULT_IMPROVE_PROMPT_ID = "keywords"
+DEFAULT_IMPROVE_PROMPT_ID = "full"
 
 # Backward-compatible alias
 IMPROVE_RESUME_PROMPT = IMPROVE_RESUME_PROMPT_FULL
@@ -414,9 +444,28 @@ RESUME_SCHEMA = RESUME_SCHEMA_EXAMPLE
 # Diff-based improvement: outputs targeted changes instead of full resume
 
 DIFF_STRATEGY_INSTRUCTIONS = {
-    "nudge": "Make minimal edits. Only rephrase where there is a clear match. Do not add new bullet points.",
-    "keywords": "Weave in relevant keywords where evidence already exists. You may rephrase bullets but do not add new ones.",
-    "full": "Make targeted adjustments. You may rephrase bullets, add verified JD skills, and add new bullets that elaborate on existing work, but do not invent new responsibilities.",
+    "nudge": (
+        "Make 2–4 minimal, conservative edits. "
+        "Rephrase the summary to open with the most JD-relevant skill. "
+        "Rephrase 1–2 experience bullets to use JD terminology where evidence already exists. "
+        "Do not add new bullets."
+    ),
+    "keywords": (
+        "Make 4–8 targeted edits. "
+        "Rephrase up to 3 experience/project bullets per section to weave in relevant JD keywords. "
+        "Append 1 new context bullet to the weakest experience entry if the original content supports it. "
+        "Reorder skills to put JD-relevant ones first."
+    ),
+    "full": (
+        "Make 6–14 impactful edits across the whole resume:\n"
+        "1. REWRITE the summary (2–3 sentences) to lead with the candidate's most relevant experience for THIS specific role.\n"
+        "2. For each experience entry: rephrase 1–3 bullets to use JD terminology where the original already supports it.\n"
+        "3. For weak experience/project entries: APPEND 1–2 new bullets that contextualise existing work against JD requirements. "
+        "Use qualitative scope language if no metrics exist in the original (never fabricate numbers).\n"
+        "4. ADD any missing verified skill targets to the skills list.\n"
+        "5. REORDER skills so JD-required ones appear first.\n"
+        "Focus effort on the sections with lowest semantic alignment."
+    ),
 }
 
 SKILL_TARGET_PLAN_PROMPT = """Build a concise skill target plan for tailoring this resume to the job.
@@ -454,36 +503,30 @@ Output this exact JSON format:
   "strategy_notes": "brief notes for the next editing pass"
 }}"""
 
-DIFF_IMPROVE_PROMPT = """Given this resume and job description, output a JSON object with targeted changes to better align the resume with the job.
+DIFF_IMPROVE_PROMPT = """\
+You are an expert resume editor. Generate targeted changes to align this resume with the job description.
 
-RULES:
-1. Only modify content — never change names, companies, dates, institutions, or degrees
-2. Do not invent metrics or achievements not supported by the original resume text
-3. Do not add new work entries, education entries, or project entries
-4. {strategy_instruction}
-5. Each change MUST include the original text (copied exactly) so it can be verified
-6. For each change, explain WHY it helps match the job description
-7. Generate all new text in {output_language}
-8. Do not use em dash characters
-9. Keep changes minimal and targeted — do not rewrite content that already aligns well
-10. Exception to rule 2: you may add a skill only if it appears in the verified skill targets below
-11. Improve work and project bullets around the verified skill targets when the original text supports that alignment
+STRATEGY:
+{strategy_instruction}
 
-PATHS you can target:
-- "summary" — the resume summary text
-- "workExperience[i].description[j]" — a specific bullet (i = entry index, j = bullet index)
-- "workExperience[i].description" — append a new bullet (action: "append")
-- "personalProjects[i].description[j]" — a specific project bullet
-- "personalProjects[i].description" — append a new project bullet
-- "additional.technicalSkills" — reorder the skills list (action: "reorder") or add one verified skill (action: "add_skill")
+WEAK SECTIONS (lowest semantic alignment — prioritise these):
+{weak_sections}
 
-Do NOT target: personalInfo, dates/years, company names, education, customSections.
+CORE RULES — follow all of them:
+1. NEVER change names, companies, dates, institutions, or degrees.
+2. NEVER remove or shorten existing technical details, metrics, or bullet points.
+3. NEVER invent companies, certifications, specific metrics, or dates not in the original.
+4. NEVER add entirely new work experience or education entries.
+5. Each change MUST include the EXACT original text so it can be verified.
+6. Generate all new text in {output_language}.
+7. Do not use em dashes (—).
+8. Only add skills from the Verified Skill Targets list below.
 
-Keywords to emphasize (only if already supported by resume content):
-{job_keywords}
-
-Verified skill targets:
+Verified Skill Targets (may be added to skills list if missing):
 {skill_targets}
+
+Job Keywords to emphasise:
+{job_keywords}
 
 Job Description:
 {job_description}
@@ -491,37 +534,27 @@ Job Description:
 Original Resume:
 {original_resume}
 
-Output this exact JSON format, nothing else:
+Valid change paths:
+- "summary"                              → replace entire summary
+- "workExperience[i].description[j]"    → replace bullet at index j
+- "workExperience[i].description"       → append a new bullet (action: "append")
+- "personalProjects[i].description[j]"  → replace project bullet at index j
+- "personalProjects[i].description"     → append a new project bullet (action: "append")
+- "additional.technicalSkills"          → reorder list (action: "reorder") OR add one skill (action: "add_skill")
+
+Do NOT target: personalInfo, years/dates, company names, education, certifications.
+
+Output this exact JSON only — no extra text:
 {{
   "changes": [
     {{
       "path": "workExperience[0].description[1]",
       "action": "replace",
-      "original": "the exact original text at this path",
-      "value": "the improved text",
-      "reason": "why this change helps"
-    }},
-    {{
-      "path": "summary",
-      "action": "replace",
-      "original": "the current summary text",
-      "value": "the improved summary",
-      "reason": "why this change helps"
-    }},
-    {{
-      "path": "additional.technicalSkills",
-      "action": "reorder",
-      "original": null,
-      "value": ["most relevant skill first", "then next", "..."],
-      "reason": "reordered to prioritize JD-relevant skills"
-    }},
-    {{
-      "path": "additional.technicalSkills",
-      "action": "add_skill",
-      "original": null,
-      "value": "verified skill target missing from the skills list",
-      "reason": "added verified JD skill for review"
+      "original": "exact original text copied verbatim",
+      "value": "improved version",
+      "reason": "one sentence explaining the improvement"
     }}
   ],
-  "strategy_notes": "brief summary of the tailoring approach"
-}}"""
+  "strategy_notes": "2-sentence summary of the tailoring approach taken"
+}}\
+"""

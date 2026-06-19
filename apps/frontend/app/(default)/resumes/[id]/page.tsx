@@ -15,6 +15,8 @@ import {
 } from '@/lib/api/resume';
 import { useStatusCache } from '@/lib/context/status-cache';
 import { ArrowLeft, Edit, Download, Loader2, AlertCircle, Sparkles, Pencil } from 'lucide-react';
+import { SemanticScoreFull } from '@/components/common/semantic-score-card';
+import type { SemanticMatchResult } from '@/components/common/resume_previewer_context';
 import { EnrichmentModal } from '@/components/enrichment/enrichment-modal';
 import { useTranslations } from '@/lib/i18n';
 import { withLocalizedDefaultSections } from '@/lib/utils/section-helpers';
@@ -44,6 +46,7 @@ export default function ResumeViewerPage() {
   const [resumeTitle, setResumeTitle] = useState<string | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState('');
+  const [semanticMatch, setSemanticMatch] = useState<SemanticMatchResult | null>(null);
 
   const resumeId = params?.id as string;
 
@@ -67,6 +70,11 @@ export default function ResumeViewerPage() {
 
         // Capture title for editable display (always set to clear stale state)
         setResumeTitle(data.title ?? null);
+
+        // Load persisted semantic match if present
+        if (data.semantic_match) {
+          setSemanticMatch(data.semantic_match as SemanticMatchResult);
+        }
 
         // Prioritize processed_resume if available (structured JSON)
         if (data.processed_resume) {
@@ -343,6 +351,13 @@ export default function ResumeViewerPage() {
                 />
               </button>
             )}
+          </div>
+        )}
+
+        {/* Semantic Alignment Card — shown for tailored resumes with stored analysis */}
+        {!isMasterResume && semanticMatch && (
+          <div className="mb-6 no-print">
+            <SemanticScoreFull match={semanticMatch} defaultExpanded={false} />
           </div>
         )}
 

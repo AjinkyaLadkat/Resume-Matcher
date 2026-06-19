@@ -142,11 +142,14 @@ async def parse_document(content: bytes, filename: str) -> str:
 
 
 async def parse_resume_to_json(markdown_text: str) -> dict[str, Any]:
-    """Parse resume markdown to structured JSON using LLM.
+    """Parse resume markdown to structured JSON.
 
-    After LLM parsing, patches any year-only dates with month-inclusive
-    dates extracted from the raw markdown. This ensures months are never
-    lost regardless of LLM behavior.
+    Tries the section-aware pipeline first.  If section detection finds no
+    headers the text falls back to the original monolithic LLM call, which
+    handles single-section or very short resumes correctly.
+
+    After either path, patches year-only dates with month-inclusive dates
+    extracted directly from the raw markdown so months are never lost.
 
     Args:
         markdown_text: Resume content in markdown format
@@ -154,6 +157,29 @@ async def parse_resume_to_json(markdown_text: str) -> dict[str, Any]:
     Returns:
         Structured resume data matching ResumeData schema
     """
+    from app.services.section_parser import parse_resume_sectioned
+
+    # ── Try section-aware pipeline ─────────────────────────────────────
+    try:
+        sectioned = await parse_resume_sectioned(markdown_text)
+    except Exception as exc:
+        logger.warning(
+            "Section-aware parser raised unexpectedly (%s) — "
+            "falling back to monolithic parse",
+            exc,
+        )
+        sectioned = {"_needs_monolithic_parse": True}
+
+    if not sectioned.get("_needs_monolithic_parse"):
+        # Section pipeline succeeded — patch dates and return
+        logger.info("parse_resume_to_json: using section-aware result")
+        return restore_dates_from_markdown(sectioned, markdown_text)
+
+    # ── Monolithic fallback ────────────────────────────────────────────
+    logger.info(
+        "parse_resume_to_json: section detection found no headers, "
+        "using monolithic LLM parse"
+    )
     prompt = PARSE_RESUME_PROMPT.format(
         schema=RESUME_SCHEMA_EXAMPLE,
         resume_text=markdown_text,
@@ -168,9 +194,4 @@ async def parse_resume_to_json(markdown_text: str) -> dict[str, Any]:
         retries=3,
     )
 
-    # Patch dates: restore months the LLM may have dropped
-    result = restore_dates_from_markdown(result, markdown_text)
-
-    # Validate against schema
-    validated = ResumeData.model_validate(result)
-    return validated.model_dump()
+    return restore_dates_from_markdown(result, markdown_text)

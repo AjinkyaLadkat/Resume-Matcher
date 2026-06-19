@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Awaitable, NoReturn, Optional
 
-from playwright.async_api import (
+from playwright.async_api import (  # type: ignore[import]
     Browser,
     Error as PlaywrightError,
     Page,
@@ -133,9 +133,34 @@ async def _render_page_to_pdf(
     pdf_format: str,
     pdf_margins: dict,
 ) -> bytes:
-    await page.goto(url, wait_until="networkidle")
-    await page.wait_for_selector(selector)
+    # "domcontentloaded" fires as soon as the HTML is parsed and DOM is built.
+    # For SSR pages all content is in the initial HTML, so this is enough
+    # to guarantee the selector is present. We then wait for "load" separately
+    # so CSS is applied before capturing the PDF.
+
+    print("========== PDF URL ==========")
+    print(url)
+    print("=============================")
+    await page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+
+    # Use state="attached" — just confirms the element exists in the DOM.
+    # Default state="visible" requires non-zero dimensions, which fails when
+    # CSS/fonts haven't applied yet and the div still has zero height.
+    await page.wait_for_selector(selector, state="attached", timeout=30_000)
+
+    # Now wait for full load (stylesheets + images) so the PDF looks correct.
+    # Wrapped in try/except because a failed sub-resource shouldn't abort the
+    # whole render — the resume HTML is already in the DOM.
+    try:
+        await page.wait_for_load_state("load", timeout=20_000)
+    except Exception:
+        pass  # DOM is ready; continue even if a resource timed out
+
+    # Fonts must be ready or text will render as boxes in the PDF.
     await page.evaluate("document.fonts.ready")
+
+    # Brief pause for layout to settle after fonts load.
+    await asyncio.sleep(0.5)
     return await page.pdf(
         format=pdf_format,
         print_background=True,

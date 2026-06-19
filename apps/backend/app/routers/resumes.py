@@ -61,6 +61,7 @@ from app.services.cover_letter import (
     generate_resume_title,
 )
 from app.prompts import DEFAULT_IMPROVE_PROMPT_ID, IMPROVE_PROMPT_OPTIONS
+from app.services.scorer import score_resume_against_jd
 
 
 def _get_default_prompt_id() -> str:
@@ -102,6 +103,51 @@ def _hash_improved_data(data: dict[str, Any]) -> str:
         default=str,  # Handle non-serializable types gracefully
     )
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _canonical_resume_dict(raw: dict[str, Any]) -> dict[str, Any]:
+    """Run raw improved_data through Pydantic to get the canonical form.
+
+    Both preview (hashing) and confirm (receiving) must hash the same
+    representation.  The frontend receives the Pydantic-validated model
+    and sends it back unchanged, so the hash must be computed AFTER
+    Pydantic validation — not on the raw dict.
+
+    Falls back to raw on validation error so the pipeline never blocks.
+    """
+    try:
+        return ResumeData.model_validate(raw).model_dump()
+    except Exception as exc:
+        logger.warning(
+            "_canonical_resume_dict: Pydantic validation failed (%s), "
+            "hashing raw dict — may cause confirm mismatch",
+            exc,
+        )
+        return raw
+
+
+def _log_hash_diff(preview_data: dict[str, Any], confirm_data: dict[str, Any]) -> None:
+    """Log which top-level keys differ between preview and confirm payloads."""
+    all_keys = set(preview_data) | set(confirm_data)
+    diffs: list[str] = []
+    for key in sorted(all_keys):
+        pv = preview_data.get(key)
+        cv = confirm_data.get(key)
+        if pv != cv:
+            pv_repr = repr(pv)[:120] if pv is not None else "MISSING"
+            cv_repr = repr(cv)[:120] if cv is not None else "MISSING"
+            diffs.append(f"  [{key}]\n    preview: {pv_repr}\n    confirm: {cv_repr}")
+    if diffs:
+        logger.warning(
+            "Hash mismatch diff (%d key(s) differ):\n%s",
+            len(diffs),
+            "\n".join(diffs),
+        )
+    else:
+        logger.warning(
+            "Hash mismatch but no top-level key differences found — "
+            "difference is likely in nested structure or serialization"
+        )
 
 
 def _normalize_personal_info_value(value: Any) -> str:
@@ -640,6 +686,7 @@ async def get_resume(resume_id: str = Query(...)) -> ResumeFetchResponse:
             outreach_message=resume.get("outreach_message"),
             parent_id=resume.get("parent_id"),
             title=resume.get("title"),
+            semantic_match=resume.get("semantic_match"),
         ),
     )
 
@@ -663,6 +710,9 @@ async def list_resumes(include_master: bool = Query(False)) -> ResumeListRespons
             created_at=resume.get("created_at", ""),
             updated_at=resume.get("updated_at", ""),
             title=resume.get("title"),
+            overall_semantic_score=(
+                resume.get("semantic_match", {}) or {}
+            ).get("overall_score"),
         )
         for resume in resumes
     ]
@@ -791,6 +841,7 @@ async def _improve_preview_flow(
             prompt_id=prompt_id,
             original_resume_data=original_resume_data,
             skill_targets=skill_targets,
+            semantic_section_scores=None,  # scored after improvement; use None here
         )
 
         improved_data, applied_changes, rejected_changes = apply_diffs(
@@ -900,7 +951,14 @@ async def _improve_preview_flow(
             response_warnings.append(f"Refinement failed: {str(e)}")
 
     improved_text = json.dumps(improved_data, indent=2)
-    preview_hash = _hash_improved_data(improved_data)
+
+    # Hash the PYDANTIC-CANONICAL form so it matches what the frontend
+    # receives and sends back in confirm.  The raw dict and the Pydantic-
+    # validated dict differ because validators (e.g. _normalize_summary,
+    # id coercions) transform the data during model_validate.
+    canonical_for_hash = _canonical_resume_dict(improved_data)
+    preview_hash = _hash_improved_data(canonical_for_hash)
+    logger.debug("Preview hash generated: %s", preview_hash)
     preview_hashes = job.get("preview_hashes")
     if not isinstance(preview_hashes, dict):
         preview_hashes = {}
@@ -931,6 +989,27 @@ async def _improve_preview_flow(
         response_warnings.append(f"Could not calculate changes: {diff_error}")
     improvements = generate_improvements(job_keywords)
 
+    # ── Semantic scoring (Phase 1 upgrade) ───────────────────────────────
+    # Run as a best-effort, non-blocking step after all existing processing.
+    # Any failure is caught inside score_resume_against_jd and returns None.
+    semantic_match = None
+    try:
+        semantic_match = await score_resume_against_jd(
+            resume_data=improved_data,
+            jd_text=job["content"],
+            jd_keywords=job_keywords,
+            run_llm_analysis=True,
+        )
+        logger.info(
+            "Semantic scoring complete: overall=%.1f, sections=%s",
+            semantic_match.overall_score,
+            {s.section: s.score for s in semantic_match.section_scores},
+        )
+        # Persist to job record so confirm endpoint can retrieve without re-scoring
+        db.update_job(request.job_id, {"semantic_match": semantic_match.model_dump()})
+    except Exception as exc:
+        logger.warning("Semantic scoring step failed: %s", str(exc)[:200])
+
     request_id = str(uuid4())
     return ImproveResumeResponse(
         request_id=request_id,
@@ -956,6 +1035,7 @@ async def _improve_preview_flow(
             warnings=response_warnings,
             refinement_attempted=refinement_attempted,
             refinement_successful=refinement_successful,
+            semantic_match=semantic_match,
         ),
     )
 
@@ -1017,8 +1097,26 @@ async def improve_resume_confirm_endpoint(
             )
 
         request_hash = _hash_improved_data(improved_data)
+        logger.debug("Confirm hash computed: %s", request_hash)
+        logger.debug("Allowed preview hashes: %s", allowed_hashes)
         if request_hash not in allowed_hashes:
-            logger.warning("Resume confirm rejected due to preview hash mismatch.")
+            # Log a structural diff so mismatches can be diagnosed without
+            # having to reproduce the issue manually.
+            try:
+                # Retrieve what the preview hashed by re-computing from stored data.
+                # We can't recover the exact preview dict, so log the confirm dict
+                # alongside its hash for comparison with the stored hashes.
+                logger.warning(
+                    "Resume confirm rejected due to preview hash mismatch. "
+                    "confirm_hash=%s  allowed=%s",
+                    request_hash,
+                    list(allowed_hashes),
+                )
+                # Attempt to show structural diff against the original resume
+                original_data = _get_original_resume_data(resume) or {}
+                _log_hash_diff(original_data, improved_data)
+            except Exception as log_exc:
+                logger.debug("Could not produce hash diff: %s", log_exc)
             raise HTTPException(
                 status_code=400,
                 detail="Invalid improved resume data. Please retry preview.",
@@ -1061,6 +1159,20 @@ async def improve_resume_confirm_endpoint(
             outreach_message=outreach_message,
             title=title,
         )
+
+        # Attach semantic match (computed during preview and stored on the job record)
+        semantic_match_dict = job.get("semantic_match")
+        if semantic_match_dict:
+            try:
+                db.update_resume(
+                    tailored_resume["resume_id"],
+                    {
+                        "semantic_match": semantic_match_dict,
+                        "job_id": request.job_id,  # stored for semantic rescore after regenerate
+                    },
+                )
+            except Exception as exc:
+                logger.warning("Could not persist semantic_match on resume: %s", exc)
 
         improvements_payload = [imp.model_dump() for imp in request.improvements]
         stage = "create_improvement"
@@ -1292,6 +1404,23 @@ async def improve_resume_endpoint(
             title=title,
         )
 
+        # Semantic scoring — run after resume is stored so a failure never
+        # blocks the user from getting their tailored resume.
+        legacy_semantic_match = None
+        try:
+            legacy_semantic_match = await score_resume_against_jd(
+                resume_data=improved_data,
+                jd_text=job["content"],
+                jd_keywords=job_keywords,
+                run_llm_analysis=True,
+            )
+            db.update_resume(
+                tailored_resume["resume_id"],
+                {"semantic_match": legacy_semantic_match.model_dump()},
+            )
+        except Exception as exc:
+            logger.warning("Semantic scoring failed in /improve: %s", str(exc)[:200])
+
         # Store improvement record
         request_id = str(uuid4())
         db.create_improvement(
@@ -1319,13 +1448,13 @@ async def improve_resume_endpoint(
                 markdownImproved=improved_text,
                 cover_letter=cover_letter,
                 outreach_message=outreach_message,
-                # Diff metadata
                 diff_summary=diff_summary,
                 detailed_changes=detailed_changes,
                 refinement_stats=refinement_stats,
                 warnings=response_warnings,
                 refinement_attempted=refinement_attempted,
                 refinement_successful=refinement_successful,
+                semantic_match=legacy_semantic_match,
             ),
         )
 

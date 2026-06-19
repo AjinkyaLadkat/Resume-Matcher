@@ -462,6 +462,7 @@ async def generate_resume_diffs(
     prompt_id: str | None = None,
     original_resume_data: dict[str, Any] | None = None,
     skill_targets: list[dict[str, Any]] | None = None,
+    semantic_section_scores: list[dict[str, Any]] | None = None,
 ) -> ImproveDiffResult:
     """Generate targeted resume diffs via LLM.
 
@@ -505,11 +506,24 @@ async def generate_resume_diffs(
     else:
         resume_input = original_resume
 
+    # Build weak sections context from semantic scores (helps model know where to focus)
+    if semantic_section_scores:
+        sorted_scores = sorted(semantic_section_scores, key=lambda s: s.get("score", 100))
+        weak_lines = [
+            f"  - {s['section'].capitalize()}: {s['score']:.0f}/100"
+            for s in sorted_scores[:3]
+            if s.get("score", 100) < 75
+        ]
+        weak_sections_str = "\n".join(weak_lines) if weak_lines else "  (all sections above 75 — fine-tune alignment only)"
+    else:
+        weak_sections_str = "  (semantic scores not available — apply balanced improvements)"
+
     prompt = DIFF_IMPROVE_PROMPT.format(
         strategy_instruction=strategy_instruction,
         output_language=output_language,
         job_keywords=keywords_str,
         skill_targets=_prepare_skill_targets_for_prompt(skill_targets),
+        weak_sections=weak_sections_str,
         job_description=sanitized_jd,
         original_resume=resume_input,
     )

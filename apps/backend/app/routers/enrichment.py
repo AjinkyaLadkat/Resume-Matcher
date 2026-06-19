@@ -418,7 +418,37 @@ async def _regenerate_experience_or_project(
     instruction: str,
     output_language: str,
 ) -> RegeneratedItem:
-    """Regenerate a single experience or project item."""
+    """Regenerate a single experience, project, or summary item."""
+    if item.item_type == "summary":
+        current_text = item.current_content[0] if item.current_content else "(No summary)"
+        prompt = f"""Rewrite this resume summary based on the user's instruction.
+
+Current summary:
+{current_text}
+
+User instruction:
+{instruction}
+
+Rules:
+- Keep it 2-4 sentences
+- Do not invent new facts or credentials not present in the original
+- Generate in {output_language}
+
+Return ONLY: {{"new_bullets": ["rewritten summary as a single string"], "change_summary": "what changed"}}"""
+        result = await complete_json(prompt, max_tokens=512, schema_type="diff")
+        new_bullets = result.get("new_bullets", [])
+        if not isinstance(new_bullets, list):
+            new_bullets = []
+        return RegeneratedItem(
+            item_id=item.item_id,
+            item_type=item.item_type,
+            title=item.title,
+            subtitle=item.subtitle,
+            original_content=item.current_content,
+            new_content=[str(b) for b in new_bullets if b],
+            diff_summary=str(result.get("change_summary") or ""),
+        )
+
     current_desc_text = (
         "\n".join(f"- {d}" for d in item.current_content)
         if item.current_content
@@ -754,6 +784,17 @@ async def apply_regenerated_items(
             else:
                 apply_failures.append(item_id)
 
+        elif item_type == "summary":
+            expected_original_content = item.original_content
+            current_summary = updated_data.get("summary", "")
+            # summary is stored as a plain string; original_content is [string]
+            current_as_list = [current_summary] if current_summary else []
+            if not _lines_equal(current_as_list, expected_original_content):
+                apply_failures.append(item_id)
+                continue
+            # new_content is a list; join into one string for the summary field
+            updated_data["summary"] = " ".join(new_content).strip()
+
         elif item_type == "skills":
             # Update technical skills (stored in additional.technicalSkills)
             expected_original_content = item.original_content
@@ -803,7 +844,63 @@ async def apply_regenerated_items(
             detail="Failed to save changes. Please try again.",
         )
 
+    # Recompute semantic score in the background (non-blocking)
+    # The resume's stored job_id tells us which JD to score against
+    asyncio.create_task(_recompute_semantic_score(resume_id, updated_data))
+
     return {
         "message": "Changes applied successfully",
         "updated_items": len(regenerated_items),
     }
+
+
+async def _recompute_semantic_score(resume_id: str, updated_data: dict) -> None:
+    """Recompute and persist semantic score after resume content changes.
+
+    Called as a background task after apply_regenerated_items so the
+    UI always reflects the current resume's alignment score.
+    """
+    try:
+        resume = db.get_resume(resume_id)
+        if not resume:
+            return
+
+        job_id = resume.get("job_id")
+        if not job_id:
+            logger.debug(
+                "_recompute_semantic_score: resume %s has no job_id, skipping", resume_id
+            )
+            return
+
+        job = db.get_job(job_id)
+        if not job:
+            logger.debug("_recompute_semantic_score: job %s not found", job_id)
+            return
+
+        from app.services.scorer import score_resume_against_jd
+
+        # Extract keywords from the stored job record
+        job_keywords = job.get("keywords") or job.get("extracted_keywords") or {}
+
+        semantic_match = await score_resume_against_jd(
+            resume_data=updated_data,
+            jd_text=job.get("content", ""),
+            jd_keywords=job_keywords,
+            run_llm_analysis=True,
+        )
+
+        db.update_resume(
+            resume_id,
+            {"semantic_match": semantic_match.model_dump()},
+        )
+        logger.info(
+            "_recompute_semantic_score: resume %s rescored → %.1f",
+            resume_id,
+            semantic_match.overall_score,
+        )
+
+    except Exception as exc:
+        # Never let scoring failure bubble up — it's a background enhancement
+        logger.warning(
+            "_recompute_semantic_score failed for resume %s: %s", resume_id, exc
+        )

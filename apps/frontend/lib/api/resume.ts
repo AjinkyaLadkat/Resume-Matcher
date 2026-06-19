@@ -1,4 +1,4 @@
-import { ImprovedResult } from '@/components/common/resume_previewer_context';
+import { ImprovedResult, SemanticMatchResult } from '@/components/common/resume_previewer_context';
 import type { ResumeData } from '@/components/dashboard/resume-component';
 import { type TemplateSettings } from '@/lib/types/template-settings';
 import { type Locale } from '@/i18n/config';
@@ -63,8 +63,10 @@ interface ResumeResponse {
     processed_resume: ProcessedResume | null;
     cover_letter?: string | null;
     outreach_message?: string | null;
-    parent_id?: string | null; // For determining if resume is tailored
+    parent_id?: string | null;
     title?: string | null;
+    /** Persisted semantic match — present on tailored resumes after confirm */
+    semantic_match?: SemanticMatchResult | null;
   };
 }
 
@@ -104,6 +106,8 @@ export interface ResumeListItem {
   created_at: string;
   updated_at: string;
   title?: string | null;
+  /** Lightweight scalar from the stored semantic_match — for dashboard badges */
+  overall_semantic_score?: number | null;
   // Optional lightweight snippet of associated job description (populated client-side)
   jobSnippet?: string;
 }

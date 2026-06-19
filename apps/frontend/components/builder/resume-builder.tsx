@@ -25,7 +25,10 @@ import {
   Sparkles,
   Loader2,
 } from 'lucide-react';
-import { useResumePreview } from '@/components/common/resume_previewer_context';
+import {
+  useResumePreview,
+  type SemanticMatchResult,
+} from '@/components/common/resume_previewer_context';
 import { PaginatedPreview } from '@/components/preview';
 import {
   downloadResumePdf,
@@ -155,6 +158,7 @@ const ResumeBuilderContent = () => {
 
   // JD comparison state
   const [jobDescription, setJobDescription] = useState<string | null>(null);
+  const [semanticMatch, setSemanticMatch] = useState<SemanticMatchResult | null>(null);
 
   // AI Regenerate wizard
   const regenerateWizard = useRegenerateWizard({
@@ -175,12 +179,29 @@ const ResumeBuilderContent = () => {
           setLastSavedData(data.processed_resume as ResumeData);
           setHasUnsavedChanges(false);
         }
+        // Update semantic match immediately if available
+        if (data.semantic_match) {
+          setSemanticMatch(data.semantic_match as SemanticMatchResult);
+        }
+        // The backend recomputes semantic score as a background task after regen.
+        // Fetch again after a delay to pick up the updated score.
+        setTimeout(async () => {
+          try {
+            const refreshed = await fetchResume(resumeId);
+            if (refreshed.semantic_match) {
+              setSemanticMatch(refreshed.semantic_match as SemanticMatchResult);
+            }
+          } catch {
+            // Silently ignore — score will update on next full page load
+          }
+        }, 4000);
       } catch (error) {
         console.error('Failed to reload resume after applying regenerated changes:', error);
         showNotification(t('builder.alerts.reloadFailed'), 'danger');
         throw error;
       }
     },
+
     onError: (errorMessage) => {
       console.error('Error during regeneration or applying regenerated changes:', errorMessage);
 
@@ -236,6 +257,19 @@ const ResumeBuilderContent = () => {
     }
     return null;
   }, [resumeData.additional?.technicalSkills, t]);
+
+  // Summary item — let users regenerate the summary section
+  const summaryItemForRegenerate: RegenerateItemInput | null = useMemo(() => {
+    if (resumeData.summary && resumeData.summary.trim()) {
+      return {
+        item_id: 'summary',
+        item_type: 'summary' as const,
+        title: 'Summary / Profile',
+        current_content: [resumeData.summary],
+      };
+    }
+    return null;
+  }, [resumeData.summary]);
 
   const localizedResumeDataForPreview = useMemo(
     () => withLocalizedDefaultSections(resumeData, t),
@@ -296,6 +330,10 @@ const ResumeBuilderContent = () => {
           }
           if (data.outreach_message) {
             setOutreachMessage(data.outreach_message);
+          }
+          // Load persisted semantic match if available
+          if (data.semantic_match) {
+            setSemanticMatch(data.semantic_match as SemanticMatchResult);
           }
           // Prefer processed_resume if available
           if (data.processed_resume) {
@@ -921,7 +959,11 @@ const ResumeBuilderContent = () => {
 
               {/* JD Match Comparison */}
               {activeTab === 'jd-match' && jobDescription && (
-                <JDComparisonView jobDescription={jobDescription} resumeData={resumeData} />
+                <JDComparisonView
+                  jobDescription={jobDescription}
+                  resumeData={resumeData}
+                  semanticMatch={semanticMatch}
+                />
               )}
             </div>
           </div>
@@ -1000,6 +1042,7 @@ const ResumeBuilderContent = () => {
         experienceItems={experienceItemsForRegenerate}
         projectItems={projectItemsForRegenerate}
         skillsItem={skillsItemForRegenerate}
+        summaryItem={summaryItemForRegenerate}
         selectedItems={regenerateWizard.selectedItems}
         onSelectionChange={regenerateWizard.setSelectedItems}
         instruction={regenerateWizard.instruction}

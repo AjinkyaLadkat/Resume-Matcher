@@ -48,7 +48,7 @@ MAX_JSON_CONTENT_SIZE = 1024 * 1024  # 1MB
 # Chosen to accommodate large resumes while staying within most providers'
 # output limits. Callers should use get_safe_max_tokens() so this is
 # automatically clamped to the model's actual capacity.
-DEFAULT_JSON_MAX_TOKENS = 8192
+DEFAULT_JSON_MAX_TOKENS = 16000
 
 
 class LLMConfig(BaseModel):
@@ -563,7 +563,7 @@ async def check_llm_health(
             "api_base": _normalize_api_base(config.provider, config.api_base),
             "timeout": LLM_TIMEOUT_HEALTH_CHECK,
         }
-        if config.reasoning_effort:
+        if config.reasoning_effort and config.provider != "ollama":
             kwargs["reasoning_effort"] = config.reasoning_effort
 
         response = await litellm.acompletion(**kwargs)
@@ -676,7 +676,7 @@ async def complete(
         }
         if _supports_temperature(model_name, temperature):
             kwargs["temperature"] = temperature
-        if config.reasoning_effort:
+        if config.reasoning_effort and config.provider != "ollama":
             kwargs["reasoning_effort"] = config.reasoning_effort
 
         response = await router.acompletion(**kwargs)
@@ -1070,7 +1070,7 @@ async def complete_json(
             retry_temp = _get_retry_temperature(model_name, attempt)
             if retry_temp is not None:
                 kwargs["temperature"] = retry_temp
-            if config.reasoning_effort:
+            if config.reasoning_effort and config.provider != "ollama":
                 kwargs["reasoning_effort"] = config.reasoning_effort
 
             # JSON-012: Fallback to prompt-only JSON mode after JSON-mode failure.
