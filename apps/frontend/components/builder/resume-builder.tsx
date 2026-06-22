@@ -44,6 +44,10 @@ import {
   fetchJobDescription,
 } from '@/lib/api/resume';
 import { JDComparisonView } from './jd-comparison-view';
+import { SkillGapPanel } from './skill-gap-panel';
+import { StrengthsWeaknessesPanel } from './strengths-weaknesses-panel';
+import { InterviewQuestionsPanel } from './interview-questions-panel';
+import { LinkedInHeadlinesPanel } from './linkedin-headlines-panel';
 import { RegenerateWizard } from './regenerate-wizard';
 import { useRegenerateWizard } from '@/hooks/use-regenerate-wizard';
 import { useTranslations } from '@/lib/i18n';
@@ -53,7 +57,7 @@ import { useLanguage } from '@/lib/context/language-context';
 import { buildResumeFilename, downloadBlobAsFile, openUrlInNewTab } from '@/lib/utils/download';
 import type { RegenerateItemInput } from '@/lib/api/enrichment';
 
-type TabId = 'resume' | 'cover-letter' | 'outreach' | 'jd-match';
+type TabId = 'resume' | 'cover-letter' | 'outreach' | 'linkedin-headline' | 'jd-match';
 
 const STORAGE_KEY = 'resume_builder_draft';
 const SETTINGS_STORAGE_KEY = 'resume_builder_settings';
@@ -775,120 +779,11 @@ const ResumeBuilderContent = () => {
           </div>
         </div>
 
-        {/* Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 bg-black gap-[1px] flex-1 min-h-0">
-          {/* Left Panel: Editor */}
-          <div className="bg-background p-6 md:p-8 overflow-y-auto no-print">
-            <div className="max-w-3xl mx-auto space-y-6">
-              <div className="flex items-center gap-2 border-b-2 border-black pb-2">
-                <div className="w-3 h-3 bg-blue-700"></div>
-                <h2 className="font-mono text-lg font-bold uppercase tracking-wider">
-                  {activeTab === 'resume' && t('builder.leftPanel.editorPanel')}
-                  {activeTab === 'cover-letter' && t('builder.leftPanel.coverLetterEditor')}
-                  {activeTab === 'outreach' && t('builder.leftPanel.outreachEditor')}
-                  {activeTab === 'jd-match' && t('builder.leftPanel.jdMatchAnalysis')}
-                </h2>
-              </div>
-
-              {/* Resume Editor */}
-              {activeTab === 'resume' && (
-                <>
-                  <FormattingControls settings={templateSettings} onChange={handleSettingsChange} />
-                  <ResumeForm resumeData={resumeData} onUpdate={handleUpdate} />
-                </>
-              )}
-
-              {/* Cover Letter Editor */}
-              {activeTab === 'cover-letter' &&
-                (coverLetter ? (
-                  <CoverLetterEditor
-                    content={coverLetter}
-                    onChange={setCoverLetter}
-                    onSave={handleSaveCoverLetter}
-                    isSaving={isCoverLetterSaving}
-                  />
-                ) : (
-                  <GeneratePrompt
-                    type="cover-letter"
-                    isGenerating={isGeneratingCoverLetter}
-                    onGenerate={handleGenerateCoverLetter}
-                    isTailoredResume={isTailoredResume}
-                  />
-                ))}
-
-              {/* Outreach Editor */}
-              {activeTab === 'outreach' &&
-                (outreachMessage ? (
-                  <OutreachEditor
-                    content={outreachMessage}
-                    onChange={setOutreachMessage}
-                    onSave={handleSaveOutreach}
-                    isSaving={isOutreachSaving}
-                  />
-                ) : (
-                  <GeneratePrompt
-                    type="outreach"
-                    isGenerating={isGeneratingOutreach}
-                    onGenerate={handleGenerateOutreach}
-                    isTailoredResume={isTailoredResume}
-                  />
-                ))}
-
-              {/* JD Match Info Panel */}
-              {activeTab === 'jd-match' && (
-                <div className="space-y-4">
-                  <div className="border-2 border-black bg-white p-4">
-                    <h3 className="font-mono text-sm font-bold uppercase mb-2">
-                      {t('builder.jdMatch.aboutTitle')}
-                    </h3>
-                    <p className="text-sm text-ink-soft leading-relaxed">
-                      {t('builder.jdMatch.aboutDescription')}
-                    </p>
-                  </div>
-
-                  <div className="border-2 border-black bg-background p-4">
-                    <h3 className="font-mono text-sm font-bold uppercase mb-2">
-                      {t('builder.jdMatch.highlightedKeywordsTitle')}
-                    </h3>
-                    <p className="text-sm text-ink-soft leading-relaxed">
-                      {(() => {
-                        const template = t(
-                          'builder.jdMatch.highlightedKeywordsDescriptionTemplate'
-                        );
-                        const parts = template.split('__COLOR__');
-                        if (parts.length < 2) return template;
-                        return (
-                          <>
-                            {parts[0]}
-                            <mark className="bg-yellow-200 px-1">
-                              {t('builder.jdMatch.highlightColor')}
-                            </mark>
-                            {parts.slice(1).join('__COLOR__')}
-                          </>
-                        );
-                      })()}
-                    </p>
-                  </div>
-
-                  <div className="border-2 border-black bg-white p-4">
-                    <h3 className="font-mono text-sm font-bold uppercase mb-2">
-                      {t('builder.jdMatch.tipsTitle')}
-                    </h3>
-                    <ul className="text-sm text-ink-soft space-y-1 list-disc list-inside">
-                      <li>{t('builder.jdMatch.tips.items.addMissingKeywords')}</li>
-                      <li>{t('builder.jdMatch.tips.items.focusTechnicalSkills')}</li>
-                      <li>{t('builder.jdMatch.tips.items.matchActionVerbs')}</li>
-                    </ul>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right Panel: Preview with Tabs */}
-          <div className="bg-secondary overflow-hidden flex flex-col no-print">
-            {/* Tabs Header */}
-            <div className="px-6 pt-3 shrink-0 bg-secondary">
+        {/* Content Grid — JD Match tab uses a full-width stacked layout instead */}
+        {activeTab === 'jd-match' || activeTab === 'linkedin-headline' ? (
+          <div className="flex-1 min-h-0 overflow-y-auto bg-background no-print">
+            <div className="max-w-6xl mx-auto p-6 md:p-8 space-y-6">
+              {/* Tabs Header (kept visible so user can switch tabs) */}
               <RetroTabs
                 tabs={[
                   { id: 'resume', label: t('builder.previewTabs.resume') },
@@ -903,6 +798,11 @@ const ResumeBuilderContent = () => {
                     disabled: !outreachMessage,
                   },
                   {
+                    id: 'linkedin-headline',
+                    label: 'LinkedIn Headline',
+                    disabled: !resumeId,
+                  },
+                  {
                     id: 'jd-match',
                     label: t('builder.previewTabs.jdMatch'),
                     disabled: !jobDescription,
@@ -911,63 +811,251 @@ const ResumeBuilderContent = () => {
                 activeTab={activeTab}
                 onTabChange={(id) => setActiveTab(id as TabId)}
               />
-            </div>
 
-            {/* Preview Content */}
-            <div className="flex-1 overflow-y-auto">
-              {/* Resume Preview */}
-              {activeTab === 'resume' && (
-                <PaginatedPreview
-                  resumeData={localizedResumeDataForPreview}
-                  settings={templateSettings}
-                />
+              {/* Section heading */}
+              <div className="flex items-center gap-2 border-b-2 border-black pb-2">
+                <div className="w-3 h-3 bg-blue-700"></div>
+                <h2 className="font-mono text-lg font-bold uppercase tracking-wider">
+                  {activeTab === 'jd-match'
+                    ? t('builder.leftPanel.jdMatchAnalysis')
+                    : 'LinkedIn Headline Generator'}
+                </h2>
+              </div>
+
+              {activeTab === 'jd-match' && (
+                <>
+                  {/* Info cards — responsive grid: 1 col mobile, 3 col desktop */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="border-2 border-black bg-white p-4">
+                      <h3 className="font-mono text-sm font-bold uppercase mb-2">
+                        {t('builder.jdMatch.aboutTitle')}
+                      </h3>
+                      <p className="text-sm text-ink-soft leading-relaxed">
+                        {t('builder.jdMatch.aboutDescription')}
+                      </p>
+                    </div>
+
+                    <div className="border-2 border-black bg-white p-4">
+                      <h3 className="font-mono text-sm font-bold uppercase mb-2">
+                        {t('builder.jdMatch.highlightedKeywordsTitle')}
+                      </h3>
+                      <p className="text-sm text-ink-soft leading-relaxed">
+                        {(() => {
+                          const template = t('builder.jdMatch.highlightedKeywordsDescriptionTemplate');
+                          const parts = template.split('__COLOR__');
+                          if (parts.length < 2) return template;
+                          return (
+                            <>
+                              {parts[0]}
+                              <mark className="bg-yellow-200 px-1">
+                                {t('builder.jdMatch.highlightColor')}
+                              </mark>
+                              {parts.slice(1).join('__COLOR__')}
+                            </>
+                          );
+                        })()}
+                      </p>
+                    </div>
+
+                    <div className="border-2 border-black bg-white p-4">
+                      <h3 className="font-mono text-sm font-bold uppercase mb-2">
+                        {t('builder.jdMatch.tipsTitle')}
+                      </h3>
+                      <ul className="text-sm text-ink-soft space-y-1 list-disc list-inside">
+                        <li>{t('builder.jdMatch.tips.items.addMissingKeywords')}</li>
+                        <li>{t('builder.jdMatch.tips.items.focusTechnicalSkills')}</li>
+                        <li>{t('builder.jdMatch.tips.items.matchActionVerbs')}</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* JD comparison + semantic/keyword scores — full width */}
+                  {jobDescription && (
+                    <>
+                      <JDComparisonView
+                        jobDescription={jobDescription}
+                        resumeData={resumeData}
+                        semanticMatch={semanticMatch}
+                      />
+
+                      {/* Strengths & Weaknesses — reads directly from semanticMatch, no API call */}
+                      {semanticMatch && <StrengthsWeaknessesPanel match={semanticMatch} />}
+
+                      {/* Skill Gap Analysis — lazy-loads on expand */}
+                      {resumeId && <SkillGapPanel resumeId={resumeId} />}
+
+                      {/* AI Interview Questions — lazy-loads on expand */}
+                      {resumeId && <InterviewQuestionsPanel resumeId={resumeId} />}
+                    </>
+                  )}
+                </>
               )}
 
-              {/* Cover Letter Preview */}
-              {activeTab === 'cover-letter' &&
-                (coverLetter && resumeData.personalInfo ? (
-                  <div className="p-6">
-                    <CoverLetterPreview
-                      content={coverLetter}
-                      personalInfo={resumeData.personalInfo}
-                      pageSize={templateSettings.pageSize}
-                    />
+              {activeTab === 'linkedin-headline' && (
+                <>
+                  {/* Description card — explains what this section does */}
+                  <div className="border-2 border-black bg-white p-4">
+                    <p className="text-sm text-ink-soft leading-relaxed">
+                      Generate four LinkedIn headline variants from your resume content —
+                      each written for a different purpose. <strong>Professional</strong> reads
+                      formally and emphasises seniority. <strong>Recruiter-Friendly</strong> is
+                      keyword-dense for recruiter search. <strong>ATS-Friendly</strong> mirrors
+                      the exact terminology from your target job description so you surface in
+                      keyword searches for that role. <strong>Personal-Brand</strong> is
+                      distinctive and conveys personality. Copy whichever fits, or regenerate
+                      for new variants.
+                    </p>
                   </div>
-                ) : (
-                  <GeneratePrompt
-                    type="cover-letter"
-                    isGenerating={isGeneratingCoverLetter}
-                    onGenerate={handleGenerateCoverLetter}
-                    isTailoredResume={isTailoredResume}
-                  />
-                ))}
 
-              {/* Outreach Preview */}
-              {activeTab === 'outreach' &&
-                (outreachMessage ? (
-                  <div className="p-6">
-                    <OutreachPreview content={outreachMessage} />
-                  </div>
-                ) : (
-                  <GeneratePrompt
-                    type="outreach"
-                    isGenerating={isGeneratingOutreach}
-                    onGenerate={handleGenerateOutreach}
-                    isTailoredResume={isTailoredResume}
-                  />
-                ))}
-
-              {/* JD Match Comparison */}
-              {activeTab === 'jd-match' && jobDescription && (
-                <JDComparisonView
-                  jobDescription={jobDescription}
-                  resumeData={resumeData}
-                  semanticMatch={semanticMatch}
-                />
+                  {/* LinkedIn Headline Generator — full width */}
+                  {resumeId && <LinkedInHeadlinesPanel resumeId={resumeId} />}
+                </>
               )}
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 bg-black gap-[1px] flex-1 min-h-0">
+            {/* Left Panel: Editor */}
+            <div className="bg-background p-6 md:p-8 overflow-y-auto no-print">
+              <div className="max-w-3xl mx-auto space-y-6">
+                <div className="flex items-center gap-2 border-b-2 border-black pb-2">
+                  <div className="w-3 h-3 bg-blue-700"></div>
+                  <h2 className="font-mono text-lg font-bold uppercase tracking-wider">
+                    {activeTab === 'resume' && t('builder.leftPanel.editorPanel')}
+                    {activeTab === 'cover-letter' && t('builder.leftPanel.coverLetterEditor')}
+                    {activeTab === 'outreach' && t('builder.leftPanel.outreachEditor')}
+                  </h2>
+                </div>
+
+                {/* Resume Editor */}
+                {activeTab === 'resume' && (
+                  <>
+                    <FormattingControls
+                      settings={templateSettings}
+                      onChange={handleSettingsChange}
+                    />
+                    <ResumeForm resumeData={resumeData} onUpdate={handleUpdate} />
+                  </>
+                )}
+
+                {/* Cover Letter Editor */}
+                {activeTab === 'cover-letter' &&
+                  (coverLetter ? (
+                    <CoverLetterEditor
+                      content={coverLetter}
+                      onChange={setCoverLetter}
+                      onSave={handleSaveCoverLetter}
+                      isSaving={isCoverLetterSaving}
+                    />
+                  ) : (
+                    <GeneratePrompt
+                      type="cover-letter"
+                      isGenerating={isGeneratingCoverLetter}
+                      onGenerate={handleGenerateCoverLetter}
+                      isTailoredResume={isTailoredResume}
+                    />
+                  ))}
+
+                {/* Outreach Editor */}
+                {activeTab === 'outreach' &&
+                  (outreachMessage ? (
+                    <OutreachEditor
+                      content={outreachMessage}
+                      onChange={setOutreachMessage}
+                      onSave={handleSaveOutreach}
+                      isSaving={isOutreachSaving}
+                    />
+                  ) : (
+                    <GeneratePrompt
+                      type="outreach"
+                      isGenerating={isGeneratingOutreach}
+                      onGenerate={handleGenerateOutreach}
+                      isTailoredResume={isTailoredResume}
+                    />
+                  ))}
+              </div>
+            </div>
+
+            {/* Right Panel: Preview with Tabs */}
+            <div className="bg-secondary overflow-hidden flex flex-col no-print">
+              {/* Tabs Header */}
+              <div className="px-6 pt-3 shrink-0 bg-secondary">
+                <RetroTabs
+                  tabs={[
+                    { id: 'resume', label: t('builder.previewTabs.resume') },
+                    {
+                      id: 'cover-letter',
+                      label: t('builder.previewTabs.coverLetter'),
+                      disabled: !coverLetter,
+                    },
+                    {
+                      id: 'outreach',
+                      label: t('builder.previewTabs.outreach'),
+                      disabled: !outreachMessage,
+                    },
+                    {
+                      id: 'linkedin-headline',
+                      label: 'LinkedIn Headline',
+                      disabled: !resumeId,
+                    },
+                    {
+                      id: 'jd-match',
+                      label: t('builder.previewTabs.jdMatch'),
+                      disabled: !jobDescription,
+                    },
+                  ]}
+                  activeTab={activeTab}
+                  onTabChange={(id) => setActiveTab(id as TabId)}
+                />
+              </div>
+
+              {/* Preview Content */}
+              <div className="flex-1 overflow-y-auto">
+                {/* Resume Preview */}
+                {activeTab === 'resume' && (
+                  <PaginatedPreview
+                    resumeData={localizedResumeDataForPreview}
+                    settings={templateSettings}
+                  />
+                )}
+
+                {/* Cover Letter Preview */}
+                {activeTab === 'cover-letter' &&
+                  (coverLetter && resumeData.personalInfo ? (
+                    <div className="p-6">
+                      <CoverLetterPreview
+                        content={coverLetter}
+                        personalInfo={resumeData.personalInfo}
+                        pageSize={templateSettings.pageSize}
+                      />
+                    </div>
+                  ) : (
+                    <GeneratePrompt
+                      type="cover-letter"
+                      isGenerating={isGeneratingCoverLetter}
+                      onGenerate={handleGenerateCoverLetter}
+                      isTailoredResume={isTailoredResume}
+                    />
+                  ))}
+
+                {/* Outreach Preview */}
+                {activeTab === 'outreach' &&
+                  (outreachMessage ? (
+                    <div className="p-6">
+                      <OutreachPreview content={outreachMessage} />
+                    </div>
+                  ) : (
+                    <GeneratePrompt
+                      type="outreach"
+                      isGenerating={isGeneratingOutreach}
+                      onGenerate={handleGenerateOutreach}
+                      isTailoredResume={isTailoredResume}
+                    />
+                  ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="p-4 bg-background flex justify-between items-center font-mono text-xs text-blue-700 border-t border-black no-print">

@@ -26,8 +26,8 @@ import logging
 from typing import Any
 
 from app.llm import complete_json
-from app.prompts.semantic import CONTEXTUAL_FIT_ANALYSIS_PROMPT
-from app.schemas.semantic import SemanticMatchResult, SectionScore
+from app.prompts.semantic import CONTEXTUAL_FIT_ANALYSIS_PROMPT_V2
+from app.schemas.semantic import SemanticMatchResult, SectionScore, StrengthItem, WeaknessItem
 from app.services.semantic import (
     chunk_jd_by_aspect,
     chunk_resume_by_section,
@@ -143,6 +143,8 @@ async def _score(
     fit_summary    = ""
     strengths: list[str] = []
     gaps:      list[str] = []
+    strengths_detailed: list[StrengthItem] = []
+    weaknesses_detailed: list[WeaknessItem] = []
     recommendation = ""
 
     if run_llm_analysis:
@@ -150,9 +152,34 @@ async def _score(
             analysis = await _contextual_analysis(
                 resume_data, jd_text, jd_keywords, section_scores, overall
             )
-            fit_summary    = str(analysis.get("fit_summary",    ""))
-            strengths      = [str(s) for s in analysis.get("strengths", []) if s]
-            gaps           = [str(g) for g in analysis.get("gaps",      []) if g]
+            fit_summary = str(analysis.get("fit_summary", ""))
+
+            raw_strengths = analysis.get("strengths_detailed", [])
+            for s in raw_strengths:
+                if isinstance(s, dict) and s.get("strength"):
+                    strengths_detailed.append(
+                        StrengthItem(
+                            strength=str(s.get("strength", "")),
+                            evidence=str(s.get("evidence", "")),
+                            relevance=str(s.get("relevance", "")),
+                        )
+                    )
+            raw_weaknesses = analysis.get("weaknesses_detailed", [])
+            for w in raw_weaknesses:
+                if isinstance(w, dict) and w.get("weakness"):
+                    weaknesses_detailed.append(
+                        WeaknessItem(
+                            weakness=str(w.get("weakness", "")),
+                            jd_requirement=str(w.get("jd_requirement", "")),
+                            weakness_type=str(w.get("weakness_type", "missing_evidence")),
+                        )
+                    )
+
+            # Populate legacy plain-string fields for backward compatibility
+            # with any UI code still reading list[str] directly.
+            strengths = [s.strength for s in strengths_detailed]
+            gaps      = [w.weakness for w in weaknesses_detailed]
+
             recommendation = str(analysis.get("recommendation", ""))
         except Exception as exc:
             logger.warning("LLM contextual analysis failed: %s", str(exc)[:200])
@@ -164,6 +191,8 @@ async def _score(
         fit_summary=fit_summary,
         strengths=strengths,
         gaps=gaps,
+        strengths_detailed=strengths_detailed,
+        weaknesses_detailed=weaknesses_detailed,
         recommendation=recommendation,
         scoring_method="semantic_embedding_cosine_v2",
     )
@@ -218,7 +247,7 @@ async def _contextual_analysis(
     req_skills  = ", ".join(str(s) for s in jd_keywords.get("required_skills",  [])[:12])
     pref_skills = ", ".join(str(s) for s in jd_keywords.get("preferred_skills", [])[:8])
 
-    prompt = CONTEXTUAL_FIT_ANALYSIS_PROMPT.format(
+    prompt = CONTEXTUAL_FIT_ANALYSIS_PROMPT_V2.format(
         overall_score=f"{overall_score:.1f}",
         section_scores=scores_text,
         resume_summary=resume_summary,
@@ -233,7 +262,7 @@ async def _contextual_analysis(
             "You are a senior technical recruiter. "
             "Be specific, concise, and honest. Output only valid JSON."
         ),
-        max_tokens=600,
+        max_tokens=900,
         schema_type="keywords",
     )
 

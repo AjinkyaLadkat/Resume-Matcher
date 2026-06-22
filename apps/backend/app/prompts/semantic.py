@@ -4,7 +4,7 @@ Used by services/scorer.py to generate human-readable fit summaries,
 strengths, gaps, and recommendations after embedding-based scoring.
 """
 
-CONTEXTUAL_FIT_ANALYSIS_PROMPT = """\
+CONTEXTUAL_FIT_ANALYSIS_PROMPT_V2 = """\
 You are a senior technical recruiter performing a contextual fit analysis.
 
 SEMANTIC SECTION SCORES (computed via embedding cosine similarity, 0–100):

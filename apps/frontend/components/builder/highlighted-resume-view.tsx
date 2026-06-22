@@ -19,7 +19,7 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
   const { t } = useTranslations();
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 p-4 border-b border-paper-tint bg-paper-tint">
         <FileUser className="w-4 h-4 text-ink-soft" />
@@ -31,8 +31,8 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
         </span>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+      {/* Content — capped height with its own scroll, matching JDDisplay */}
+      <div className="max-h-[70vh] overflow-y-auto p-4 space-y-6">
         {/* Summary */}
         {resumeData.summary && (
           <Section title={t('resume.sections.summary')} icon={<FileUser className="w-4 h-4" />}>

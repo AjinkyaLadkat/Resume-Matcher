@@ -80,12 +80,30 @@ export interface SectionScore {
   has_content: boolean;
 }
 
+export interface StrengthItem {
+  strength: string;
+  evidence: string;
+  relevance: string;
+}
+
+export interface WeaknessItem {
+  weakness: string;
+  jd_requirement: string;
+  weakness_type: 'missing_experience' | 'missing_evidence' | 'weak_alignment' | string;
+}
+
 export interface SemanticMatchResult {
   overall_score: number;
   section_scores: SectionScore[];
   fit_summary: string;
+  /** @deprecated short phrases — prefer strengths_detailed */
   strengths: string[];
+  /** @deprecated short phrases — prefer weaknesses_detailed */
   gaps: string[];
+  /** Evidence-based strengths citing actual resume content */
+  strengths_detailed?: StrengthItem[];
+  /** JD-gap-based weaknesses tied to specific requirements */
+  weaknesses_detailed?: WeaknessItem[];
   recommendation: string;
   scoring_method: string;
 }

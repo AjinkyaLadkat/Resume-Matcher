@@ -15,7 +15,7 @@ export function JDDisplay({ content }: JDDisplayProps) {
   const { t } = useTranslations();
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 p-4 border-b border-paper-tint bg-paper-tint">
         <FileText className="w-4 h-4 text-ink-soft" />
@@ -24,8 +24,10 @@ export function JDDisplay({ content }: JDDisplayProps) {
         </h3>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      {/* Content — capped height with its own scroll on large screens so the
+          page doesn't grow unbounded when the JD is very long, but never
+          forces scrolling at the page level. */}
+      <div className="max-h-[70vh] overflow-y-auto p-4">
         <div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">{content}</div>
       </div>
     </div>

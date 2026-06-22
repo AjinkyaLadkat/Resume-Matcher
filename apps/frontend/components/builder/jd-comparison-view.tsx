@@ -53,13 +53,13 @@ export function JDComparisonView({
   }, [keywords, resumeData]);
 
   return (
-    <div className="h-full flex flex-col">
-      {/* ── Header bar ─────────────────────────────────────────────────── */}
-      <div className="px-4 py-3 bg-white border-b border-paper-tint space-y-3">
+    <div className="space-y-6">
+      {/* ── Score header card ──────────────────────────────────────────── */}
+      <div className="border-2 border-black bg-white p-4 space-y-3">
         {semanticMatch ? (
           <SemanticScoreCompact match={semanticMatch} />
         ) : (
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div className="flex items-center gap-2 text-ink-soft">
               <TrendingUp className="w-4 h-4" />
               <span className="font-mono text-xs font-bold uppercase tracking-wider">
@@ -77,7 +77,7 @@ export function JDComparisonView({
 
         {/* Keyword match — always shown when JD is present */}
         {kwStats && (
-          <div className="flex items-center justify-between border-t border-paper-tint pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-paper-tint pt-3">
             <div className="flex items-center gap-2 text-ink-soft">
               <Tag className="w-3.5 h-3.5" />
               <span className="font-mono text-xs font-bold uppercase tracking-wider">
@@ -102,12 +102,14 @@ export function JDComparisonView({
         )}
       </div>
 
-      {/* ── Split view ──────────────────────────────────────────────────── */}
-      <div className="flex-1 grid grid-cols-2 min-h-0">
-        <div className="border-r border-paper-tint overflow-hidden">
+      {/* ── JD vs Resume comparison ──────────────────────────────────────
+          Stacked on mobile/tablet, side-by-side on large screens.
+          Each panel sizes to its own content — no forced inner scroll. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="border-2 border-black bg-white">
           <JDDisplay content={jobDescription} />
         </div>
-        <div className="overflow-hidden">
+        <div className="border-2 border-black bg-white">
           <HighlightedResumeView resumeData={resumeData} keywords={keywords} />
         </div>
       </div>

@@ -75,7 +75,7 @@ class ApplyEnhancementsRequest(BaseModel):
 # AI Regenerate Feature Schemas
 # ============================================
 
-RegenerateItemType = Literal["experience", "project", "skills"]
+RegenerateItemType = Literal["experience", "project", "skills","summary", "education", "certification", "other"]
 
 
 class RegenerateItemInput(BaseModel):
