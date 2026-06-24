@@ -1,25 +1,58 @@
-"""Semantic scoring engine.
+"""Semantic scoring engine — v3 calibration.
 
 Orchestrates:
   1. Section-wise resume + JD chunking   (semantic.chunk_*)
   2. Concurrent embedding generation     (semantic.get_embeddings_batch)
   3. Cosine similarity per section       (semantic.cosine_similarity)
-  4. Weighted overall score + coverage bonus
-  5. LLM contextual fit analysis
+  4. Deterministic skill-overlap gate    (skill_overlap_gate.py)
+  5. Weighted blend of semantic + skill-overlap signals
+  6. LLM contextual fit analysis
 
 Entry point: score_resume_against_jd()
 
-Calibration notes
------------------
-nomic-embed-text cosine ranges for genuinely related text pairs:
-  0.30-0.45  same domain, different specifics  → user sees 38-56
-  0.45-0.60  solid skill/experience match      → user sees 56-74
-  0.60-0.75  strong alignment                  → user sees 74-89
-  0.75-0.90  near-perfect match                → user sees 89-97
+═══════════════════════════════════════════════════════════════════════════
+CALIBRATION v3 — why this exists
+═══════════════════════════════════════════════════════════════════════════
 
-A coverage bonus (+3 or +6) is added when 3+ sections show real
-semantic overlap (cosine ≥ 0.30), rewarding well-rounded resumes
-without faking scores.
+Problem found in production: a Data Analytics resume scored 74/100 against
+a completely unrelated Retail Store Operations Supervisor JD. Root cause:
+embedding cosine similarity cannot distinguish "domain match" from "both
+texts are written in professional English." Two unrelated resumes share
+enough generic structure (verbs, workplace nouns, professional register)
+to produce cosine ~0.30-0.45 — and the old calibration treated that whole
+range as "same domain, different specifics," mapping it to scores of 40-62.
+
+Fix: the final score is now a 50/50 BLEND of two independent signals:
+
+  1. SEMANTIC SIGNAL (cosine-based, recalibrated)
+     The cosine→score curve is widened so the "generic professional
+     similarity" zone (cosine 0.30-0.45) compresses into the 25-45 range
+     instead of 40-62 — it no longer pretends to mean "same domain."
+
+  2. SKILL-OVERLAP SIGNAL (deterministic, not LLM-based)
+     What fraction of the JD's required_skills are literally/fuzzily
+     found anywhere in the resume (skills list, summary, experience
+     bullets, project bullets). This is the signal that actually
+     detects domain mismatch — a retail JD's required skills (POS
+     systems, inventory management, staff scheduling) will have near-
+     zero overlap with a data analytics resume's content, regardless
+     of how "professionally similar" the prose reads.
+
+Neither signal alone is sufficient:
+  - Cosine alone over-rewards generic professional language (the bug).
+  - Skill-overlap alone would under-reward genuinely transferable
+    experience phrased with different terminology than the JD uses.
+
+The blend means a resume needs BOTH decent semantic alignment AND
+real skill-keyword evidence to score highly — exactly matching the
+requirement that "domain alignment," "required skills," and "experience
+alignment" all carry significant, independent weight.
+
+Target calibration bands (validated against benchmark suite):
+  Strong fit (same domain, most skills present):      75-95
+  Moderate fit (related domain, some skills present): 45-75
+  Weak fit (loosely related, few skills present):      20-45
+  Different domain (no skill evidence):                 0-25
 """
 
 import logging
@@ -34,10 +67,11 @@ from app.services.semantic import (
     cosine_similarity,
     get_embeddings_batch,
 )
+from app.services.skill_overlap_gate import compute_skill_overlap
 
 logger = logging.getLogger(__name__)
 
-# ── Section weights (must sum to 1.0) ──────────────────────────────────────
+# ── Section weights (must sum to 1.0) — unchanged from v2 ──────────────────
 SECTION_WEIGHTS: dict[str, float] = {
     "experience": 0.35,
     "skills":     0.25,
@@ -47,8 +81,18 @@ SECTION_WEIGHTS: dict[str, float] = {
 }
 _SECTIONS = list(SECTION_WEIGHTS.keys())
 
-# Cosine threshold above which a section counts as "genuinely matching"
-_COVERAGE_THRESHOLD = 0.30
+# ── Blend weights between semantic (cosine) and skill-overlap signals ─────
+# Equal weighting: a resume needs BOTH dimensions to score highly. This is
+# the direct fix for "domain alignment" / "required skills" / "experience
+# alignment" all needing significant, independent weight per the requirements.
+_SEMANTIC_SIGNAL_WEIGHT = 0.50
+_SKILL_OVERLAP_SIGNAL_WEIGHT = 0.50
+
+# Exponent controlling how punishing partial skill-overlap is.
+# >1.0 means partial overlap (e.g. 50%) scores less than half credit,
+# reflecting that missing half the required skills is a real gap, not a
+# minor one.
+_SKILL_OVERLAP_EXPONENT = 1.2
 
 
 # ---------------------------------------------------------------------------
@@ -98,8 +142,7 @@ async def _score(
     jd_embs          = all_embeddings[len(_SECTIONS) :]
 
     section_scores: list[SectionScore] = []
-    total_weighted  = 0.0
-    coverage_hits   = 0  # sections with cosine ≥ threshold
+    total_weighted_semantic = 0.0
 
     for i, section in enumerate(_SECTIONS):
         weight      = SECTION_WEIGHTS[section]
@@ -107,17 +150,10 @@ async def _score(
         j_emb       = jd_embs[i]
         has_content = bool(resume_chunks.get(section))
 
-        if r_emb and j_emb:
-            raw_sim = cosine_similarity(r_emb, j_emb)
-        else:
-            raw_sim = 0.0
-
-        if raw_sim >= _COVERAGE_THRESHOLD:
-            coverage_hits += 1
-
+        raw_sim = cosine_similarity(r_emb, j_emb) if (r_emb and j_emb) else 0.0
         score_100    = _scale_cosine(raw_sim)
         contribution = round(score_100 * weight, 2)
-        total_weighted += contribution
+        total_weighted_semantic += contribution
 
         section_scores.append(
             SectionScore(
@@ -130,14 +166,29 @@ async def _score(
             )
         )
 
-    # Coverage bonus — deterministic, semantically grounded
-    bonus = 0.0
-    if coverage_hits >= 4:
-        bonus = 6.0
-    elif coverage_hits >= 3:
-        bonus = 3.0
+    # ── Deterministic skill-overlap signal ───────────────────────────────
+    # This is the mechanism that actually detects domain mismatch — cosine
+    # similarity alone cannot, since generic professional English produces
+    # similar embeddings regardless of domain.
+    overlap = compute_skill_overlap(resume_data, jd_keywords)
+    skill_overlap_score = round(100 * (overlap["required_match_rate"] ** _SKILL_OVERLAP_EXPONENT), 1)
 
-    overall = round(min(total_weighted + bonus, 100.0), 1)
+    # ── Blend the two independent signals ────────────────────────────────
+    semantic_score = round(min(total_weighted_semantic, 100.0), 1)
+    overall = round(
+        semantic_score * _SEMANTIC_SIGNAL_WEIGHT
+        + skill_overlap_score * _SKILL_OVERLAP_SIGNAL_WEIGHT,
+        1,
+    )
+    overall = max(0.0, min(overall, 100.0))
+
+    logger.info(
+        "Score blend: semantic=%.1f (cosine-based) + skill_overlap=%.1f "
+        "(%d/%d required skills matched) -> overall=%.1f",
+        semantic_score, skill_overlap_score,
+        overlap["required_matched"], overlap["required_total"],
+        overall,
+    )
 
     # ── LLM contextual analysis ─────────────────────────────────────────
     fit_summary    = ""
@@ -150,7 +201,7 @@ async def _score(
     if run_llm_analysis:
         try:
             analysis = await _contextual_analysis(
-                resume_data, jd_text, jd_keywords, section_scores, overall
+                resume_data, jd_text, jd_keywords, section_scores, overall, overlap
             )
             fit_summary = str(analysis.get("fit_summary", ""))
 
@@ -176,14 +227,30 @@ async def _score(
                     )
 
             # Populate legacy plain-string fields for backward compatibility
-            # with any UI code still reading list[str] directly.
             strengths = [s.strength for s in strengths_detailed]
             gaps      = [w.weakness for w in weaknesses_detailed]
 
             recommendation = str(analysis.get("recommendation", ""))
         except Exception as exc:
             logger.warning("LLM contextual analysis failed: %s", str(exc)[:200])
-            fit_summary = _fallback_summary(overall, section_scores)
+            fit_summary = _fallback_summary(overall, section_scores, overlap)
+
+    # If missing_critical skills exist and weren't already surfaced via the
+    # LLM weaknesses, ensure at least one weakness reflects the gap — this
+    # guarantees the UI never shows a high score with zero explanation when
+    # the skill-overlap signal pulled it down.
+    if overlap["missing_critical"] and not weaknesses_detailed:
+        weaknesses_detailed.append(
+            WeaknessItem(
+                weakness=(
+                    f"No evidence of required skills: "
+                    f"{', '.join(overlap['missing_critical'][:5])}"
+                ),
+                jd_requirement=", ".join(overlap["missing_critical"][:5]),
+                weakness_type="missing_evidence",
+            )
+        )
+        gaps = gaps or [w.weakness for w in weaknesses_detailed]
 
     return SemanticMatchResult(
         overall_score=overall,
@@ -194,37 +261,41 @@ async def _score(
         strengths_detailed=strengths_detailed,
         weaknesses_detailed=weaknesses_detailed,
         recommendation=recommendation,
-        scoring_method="semantic_embedding_cosine_v2",
+        scoring_method="semantic_skill_blend_v3",
     )
 
 
 # ---------------------------------------------------------------------------
-# Calibration
+# Calibration — v3
 # ---------------------------------------------------------------------------
 
 def _scale_cosine(cosine: float) -> float:
-    """Map cosine similarity to 0-100 score.
+    """Map cosine similarity to a 0-100 SEMANTIC signal score (pre-blend).
 
-    Calibrated for nomic-embed-text where relevant text pairs typically
-    produce cosine 0.35-0.75.  Mapping keeps semantic ordering intact
-    while producing more confidence-inspiring scores for mid-range matches.
+    Recalibrated in v3 to compress the "generic professional similarity"
+    zone. nomic-embed-text produces cosine ~0.30-0.45 for almost any two
+    pieces of professional resume/JD text — including completely unrelated
+    domains. This curve no longer interprets that range as meaningful
+    domain alignment; genuine alignment requires cosine 0.50+.
 
     Breakpoints (cosine → score):
-      0.00 → 0
-      0.20 → 15    (truly unrelated)
-      0.35 → 40    (weak match)
-      0.50 → 62    (moderate match)
-      0.65 → 78    (good match)
-      0.80 → 91    (strong match)
+      0.00 → 0     (no similarity)
+      0.30 → 25    (generic professional-text similarity — NOT domain match)
+      0.45 → 45    (some genuine topical overlap)
+      0.60 → 65    (solid alignment)
+      0.75 → 85    (strong alignment)
+      0.90 → 95    (near-perfect)
       1.00 → 100   (identical)
+
+    This is one of two signals blended in _score() — see module docstring.
     """
     if cosine <= 0.00: return 0.0
-    if cosine <= 0.20: return (cosine / 0.20) * 15
-    if cosine <= 0.35: return 15 + ((cosine - 0.20) / 0.15) * 25
-    if cosine <= 0.50: return 40 + ((cosine - 0.35) / 0.15) * 22
-    if cosine <= 0.65: return 62 + ((cosine - 0.50) / 0.15) * 16
-    if cosine <= 0.80: return 78 + ((cosine - 0.65) / 0.15) * 13
-    return                     91 + ((cosine - 0.80) / 0.20) * 9
+    if cosine <= 0.30: return (cosine / 0.30) * 25
+    if cosine <= 0.45: return 25 + ((cosine - 0.30) / 0.15) * 20
+    if cosine <= 0.60: return 45 + ((cosine - 0.45) / 0.15) * 20
+    if cosine <= 0.75: return 65 + ((cosine - 0.60) / 0.15) * 20
+    if cosine <= 0.90: return 85 + ((cosine - 0.75) / 0.15) * 10
+    return                     95 + ((cosine - 0.90) / 0.10) * 5
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +308,7 @@ async def _contextual_analysis(
     jd_keywords: dict[str, Any],
     section_scores: list[SectionScore],
     overall_score: float,
+    overlap: dict[str, Any],
 ) -> dict[str, Any]:
     resume_summary = _build_resume_summary(resume_data)
     jd_excerpt     = (jd_text or "")[:1500]
@@ -247,9 +319,17 @@ async def _contextual_analysis(
     req_skills  = ", ".join(str(s) for s in jd_keywords.get("required_skills",  [])[:12])
     pref_skills = ", ".join(str(s) for s in jd_keywords.get("preferred_skills", [])[:8])
 
+    # Surface the deterministic skill-overlap finding directly in the prompt
+    # so the LLM's narrative is consistent with the score, not contradicting it.
+    overlap_context = (
+        f"Required skills matched in resume: {overlap['required_matched']}/{overlap['required_total']}. "
+    )
+    if overlap["missing_critical"]:
+        overlap_context += f"Missing critical skills: {', '.join(overlap['missing_critical'][:8])}."
+
     prompt = CONTEXTUAL_FIT_ANALYSIS_PROMPT_V2.format(
         overall_score=f"{overall_score:.1f}",
-        section_scores=scores_text,
+        section_scores=scores_text + f"\n  Skill-overlap finding: {overlap_context}",
         resume_summary=resume_summary,
         job_description=jd_excerpt,
         required_skills=req_skills  or "(none extracted)",
@@ -293,12 +373,19 @@ def _build_resume_summary(resume_data: dict[str, Any]) -> str:
 def _fallback_summary(
     overall_score: float,
     section_scores: list[SectionScore],
+    overlap: dict[str, Any],
 ) -> str:
-    level = "strong" if overall_score >= 75 else ("moderate" if overall_score >= 50 else "partial")
+    level = "strong" if overall_score >= 75 else ("moderate" if overall_score >= 45 else
+            ("weak" if overall_score >= 20 else "very low"))
     summary = (
-        f"This resume shows {level} semantic alignment with the job description "
+        f"This resume shows {level} alignment with the job description "
         f"(score: {overall_score:.0f}/100)."
     )
+    if overlap["required_total"] > 0:
+        summary += (
+            f" {overlap['required_matched']}/{overlap['required_total']} "
+            f"required skills are evidenced in the resume."
+        )
     if section_scores:
         top = max(section_scores, key=lambda s: s.score)
         low = min(section_scores, key=lambda s: s.score)
