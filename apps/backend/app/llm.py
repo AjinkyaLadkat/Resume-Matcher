@@ -2,6 +2,7 @@
 
 import json
 import logging
+from logging import config
 import re
 import threading
 from typing import Any, Literal
@@ -566,7 +567,29 @@ async def check_llm_health(
         if config.reasoning_effort and config.provider != "ollama":
             kwargs["reasoning_effort"] = config.reasoning_effort
 
-        response = await litellm.acompletion(**kwargs)
+        print("=" * 60)
+        print(kwargs)
+        print("=" * 60)
+
+        router, _ = get_router(config)
+
+#         response = await router.acompletion(
+#             model="primary",
+#             messages=[{"role": "user", "content": prompt}],
+#             max_tokens=64,
+#             timeout=30,
+# )
+        print(config)
+
+        print(config.provider)
+        print(config.model)
+        print(config.api_base)
+        print(config.api_key)
+
+        print(kwargs)
+        response = await litellm.acompletion(
+        **kwargs
+)
         content = _extract_choice_text(response.choices[0])
         if not content:
             # LLM-003: Empty response (even after reasoning_content / thinking
