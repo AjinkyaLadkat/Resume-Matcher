@@ -57,6 +57,9 @@ Target calibration bands (validated against benchmark suite):
 
 import logging
 from typing import Any
+import json
+
+from click import prompt
 
 from app.llm import complete_json
 from app.prompts.semantic import CONTEXTUAL_FIT_ANALYSIS_PROMPT_V2
@@ -203,9 +206,39 @@ async def _score(
             analysis = await _contextual_analysis(
                 resume_data, jd_text, jd_keywords, section_scores, overall, overlap
             )
+
+            # DEBUG: Inspect the raw LLM response
+            logger.info(
+                "Raw contextual analysis:\n%s",
+                json.dumps(analysis, indent=2)
+            )
+
             fit_summary = str(analysis.get("fit_summary", ""))
 
-            raw_strengths = analysis.get("strengths_detailed", [])
+            # ------------------------------------------------------------------
+            # Parse strengths (prefer V2 schema, fallback to legacy)
+            # ------------------------------------------------------------------
+            raw_strengths = analysis.get("strengths_detailed")
+
+            if raw_strengths is None:
+                legacy_strengths = analysis.get("strengths", [])
+                if legacy_strengths:
+                    logger.warning(
+                        "LLM returned legacy 'strengths' schema; converting to strengths_detailed"
+                    )
+                    raw_strengths = [
+                        {
+                            "strength": s,
+                            "evidence": "",
+                            "relevance": "",
+                        }
+                        for s in legacy_strengths
+                    ]
+                else:
+                    raw_strengths = []
+
+            
+
             for s in raw_strengths:
                 if isinstance(s, dict) and s.get("strength"):
                     strengths_detailed.append(
@@ -215,22 +248,55 @@ async def _score(
                             relevance=str(s.get("relevance", "")),
                         )
                     )
-            raw_weaknesses = analysis.get("weaknesses_detailed", [])
+
+            # ------------------------------------------------------------------
+            # Parse weaknesses (prefer V2 schema, fallback to legacy)
+            # ------------------------------------------------------------------
+            raw_weaknesses = analysis.get("weaknesses_detailed")
+
+            if raw_weaknesses is None:
+                legacy_gaps = analysis.get("gaps", [])
+                if legacy_gaps:
+                    logger.warning(
+                        "LLM returned legacy 'gaps' schema; converting to weaknesses_detailed"
+                    )
+                    raw_weaknesses = [
+                        {
+                            "weakness": g,
+                            "jd_requirement": "",
+                            "weakness_type": "missing_evidence",
+                        }
+                        for g in legacy_gaps
+                    ]
+                else:
+                    raw_weaknesses = []
+
+            
+
             for w in raw_weaknesses:
                 if isinstance(w, dict) and w.get("weakness"):
                     weaknesses_detailed.append(
                         WeaknessItem(
                             weakness=str(w.get("weakness", "")),
                             jd_requirement=str(w.get("jd_requirement", "")),
-                            weakness_type=str(w.get("weakness_type", "missing_evidence")),
+                            weakness_type=str(
+                                w.get("weakness_type", "missing_evidence")
+                            ),
                         )
                     )
 
+            logger.info(
+                "Parsed strengths=%d, weaknesses=%d",
+                len(strengths_detailed),
+                len(weaknesses_detailed),
+            )
+
             # Populate legacy plain-string fields for backward compatibility
             strengths = [s.strength for s in strengths_detailed]
-            gaps      = [w.weakness for w in weaknesses_detailed]
+            gaps = [w.weakness for w in weaknesses_detailed]
 
             recommendation = str(analysis.get("recommendation", ""))
+
         except Exception as exc:
             logger.warning("LLM contextual analysis failed: %s", str(exc)[:200])
             fit_summary = _fallback_summary(overall, section_scores, overlap)
@@ -335,6 +401,8 @@ async def _contextual_analysis(
         required_skills=req_skills  or "(none extracted)",
         preferred_skills=pref_skills or "(none extracted)",
     )
+
+    
 
     return await complete_json(
         prompt=prompt,

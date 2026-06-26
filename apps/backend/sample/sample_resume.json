@@ -1,0 +1,41 @@
+{
+  "summary": "Detail-oriented Data Analyst with expertise in SQL, Python (Pandas, NumPy, Matplotlib), Power BI, data cleaning, KPI reporting, and business intelligence.",
+
+  "additional": {
+    "technicalSkills": [
+      "Python",
+      "SQL",
+      "Excel",
+      "Power BI",
+      "Data Analysis",
+      "Data Visualization",
+      "Business Intelligence",
+      "DAX"
+    ],
+    "certificationsTraining": ["Microsoft Certified Azure Fundamentals"]
+  },
+
+  "workExperience": [
+    {
+      "title": "Data Analyst Intern",
+      "description": [
+        "Developed over 30 interactive Power BI dashboards.",
+        "Performed KPI analysis and data transformation.",
+        "Optimized SQL queries for reporting.",
+        "Performed exploratory data analysis.",
+        "Created dashboards for business intelligence."
+      ]
+    }
+  ],
+
+  "personalProjects": [
+    {
+      "name": "Spotify Dashboard",
+      "description": [
+        "Built interactive Power BI dashboards.",
+        "Analyzed song popularity trends.",
+        "Used Python with Pandas, NumPy and Matplotlib."
+      ]
+    }
+  ]
+}

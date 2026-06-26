@@ -1,0 +1,23 @@
+{
+  "required_skills": [
+    "SQL",
+    "Power BI",
+    "Microsoft Excel",
+    "Python",
+    "Data Cleaning",
+    "Data Visualization",
+    "Statistics Fundamentals",
+    "KPI Reporting",
+    "Business Intelligence",
+    "Analytical Thinking"
+  ],
+
+  "preferred_skills": [
+    "Power Query",
+    "MySQL",
+    "PostgreSQL",
+    "Data Storytelling",
+    "Git",
+    "Azure Data Studio"
+  ]
+}

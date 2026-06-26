@@ -400,7 +400,7 @@ Requirements:
 
 Output plain text only. No JSON, no markdown formatting."""
 
-OUTREACH_MESSAGE_PROMPT = """Generate a cold outreach message for LinkedIn or email about this job opportunity.
+OUTREACH_MESSAGE_PROMPT = """Generate a professional cold outreach message regarding this job opportunity.
 
 IMPORTANT: Write in {output_language}.
 
@@ -411,16 +411,30 @@ Candidate Resume (JSON):
 {resume_data}
 
 Guidelines:
-- 70-100 words maximum (shorter than a cover letter)
-- First sentence: Reference specific detail from job description (team, product, technical challenge) - never open with "I'm reaching out" or "I saw your posting"
-- One sentence on strongest matching qualification with a concrete metric if available
-- End with low-friction ask: "Worth a quick chat?" not "I'd love the opportunity to discuss"
-- Tone: How you'd message a former colleague, not a stranger
-- Do NOT include placeholder brackets
-- Do NOT use phrases like "excited about" or "passionate about"
-- Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it
+
+* Generate a complete professional outreach message suitable for networking with a recruiter, hiring manager, or employee.
+* The message should be appropriate for both email and LinkedIn in a professional environment.
+* Include:
+
+  * Subject line
+  * Professional greeting
+  * 2-3 concise body paragraphs
+  * Professional closing
+  * Signature placeholder: [Your Name]
+* Use placeholders where appropriate, such as:
+
+  * [Hiring Manager Name]
+  * [Company Name]
+* Opening paragraph should reference a specific aspect of the company, role, product, team, or job description. Never open with generic phrases like "I am reaching out" or "I saw your posting."
+* Clearly explain why the candidate is a strong fit by highlighting the most relevant skills, experience, or measurable achievements from the resume.
+* Maintain a genuine, confident, and professional tone throughout.
+* Keep the message concise (approximately 150-220 words).
+* Do NOT fabricate experience, achievements, or qualifications that are not present in the resume.
+* Do NOT overuse AI-style phrases such as "excited about", "passionate about", "thrilled", "delighted", or similar expressions.
+* Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it.
 
 Output plain text only. No JSON, no markdown formatting."""
+
 
 GENERATE_TITLE_PROMPT = """Extract the job title and company name from this job description.
 

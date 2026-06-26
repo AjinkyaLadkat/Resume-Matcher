@@ -138,11 +138,29 @@ AI_PHRASE_REPLACEMENTS: dict[str, str] = {
 KEYWORD_INJECTION_PROMPT = """Inject the following keywords into this resume where they can be naturally and TRUTHFULLY incorporated.
 
 CRITICAL RULES:
-1. Only add keywords where the master resume provides supporting evidence
+1. Only add a keyword if there is explicit textual evidence in the master resume. The keyword must already exist OR be directly supported by an existing responsibility, project, certification, or technical skill. If explicit evidence cannot be found, do not add the keyword.
 2. Do NOT add skills, technologies, or certifications not in the master resume
 3. Rephrase existing bullet points to include keywords - do not invent new content
 4. Maintain the exact same JSON structure
 5. Do not use em-dashes (—) or their variants (---, --)
+6. "Supporting evidence" means the candidate has explicitly demonstrated the skill, technology, tool, responsibility, certification, or project somewhere in the MASTER RESUME.
+
+7. Do NOT infer experience from related technologies.
+Example:
+- Python does NOT imply Cybersecurity.
+- SQL does NOT imply Database Administration.
+- Power BI does NOT imply Tableau.
+- Data Engineering does NOT imply Mechanical Design.
+- Cloud experience does NOT imply DevOps.
+- Programming does NOT imply Software Architecture.
+
+8. Never rewrite the candidate into a different profession.
+A Data Analyst must remain a Data Analyst.
+A Software Engineer must remain a Software Engineer.
+A Mechanical Engineer must remain a Mechanical Engineer.
+
+9. If the JD contains unsupported keywords, leave them absent.
+The downstream Skill Gap Analysis is responsible for identifying those gaps.
 
 Keywords to inject (only if supported by master resume):
 {keywords_to_inject}
@@ -172,6 +190,30 @@ VERIFY:
 - All skills exist in the master resume
 - All certifications exist in the master resume
 - No fabricated metrics or achievements
+VERIFY:
+
+- Every responsibility can be traced to the master resume.
+- Every technology can be traced to the master resume.
+- Every tool can be traced to the master resume.
+- Every certification can be traced to the master resume.
+- Every project can be traced to the master resume.
+
+If any sentence cannot be directly supported by the master resume, remove or rewrite it.
+
+Do NOT infer domain expertise.
+
+Examples:
+
+INCORRECT:
+Python -> Cybersecurity
+Python -> CAD
+SQL -> Database Administrator
+
+CORRECT:
+Python -> Python
+SQL -> SQL
+Power BI -> Power BI
+Docker -> Docker
 
 Resume to polish:
 {resume}

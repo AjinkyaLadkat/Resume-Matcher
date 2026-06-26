@@ -1,10 +1,13 @@
 """LiteLLM wrapper for multi-provider AI support."""
 
+from asyncio.log import logger
 import json
 import logging
 import re
 import threading
 from typing import Any, Literal
+
+from click import prompt
 
 import litellm
 from litellm import Router
@@ -1021,7 +1024,6 @@ def _extract_json(content: str, _depth: int = 0) -> str:
         content[:200] if content else "<empty>",
     )
     raise ValueError(f"No JSON found in response: {original[:200]}")
-
 
 async def complete_json(
     prompt: str,
