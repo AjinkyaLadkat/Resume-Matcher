@@ -31,22 +31,14 @@ export default function Hero() {
         </h1>
 
         <div className="flex flex-col gap-4 md:flex-row md:gap-12">
-          <a
-            href="https://github.com/srbhr/Resume-Matcher"
+          {/* <a
+            href="https://github.com/AjinkyaLadkat/Resume-Matcher.git"
             target="_blank"
             rel="noopener noreferrer"
             className={buttonClass}
           >
             GitHub
-          </a>
-          <a
-            href="https://resumematcher.fyi"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={buttonClass}
-          >
-            {t('home.docs')}
-          </a>
+          </a> */}
           <Link href="/dashboard" className={buttonClass}>
             {t('home.launchApp')}
           </Link>

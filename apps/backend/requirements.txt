@@ -5,12 +5,9 @@ pydantic==2.12.5
 pydantic-settings==2.12.0
 tinydb==4.8.2
 litellm==1.83.10
-markitdown[docx]==0.1.4
+markitdown[all]==0.1.4
+pdfminer.six==20260107
 python-docx==1.2.0
 playwright==1.58.0
 python-dotenv==1.0.1
-# Semantic upgrade (Phase 1) — no extra deps required:
-# - litellm.aembedding() handles Ollama nomic-embed-text natively
-# - cosine_similarity uses pure Python math (no numpy)
-# To pull the embedding model in Ollama run:
-#   ollama pull nomic-embed-text
+
