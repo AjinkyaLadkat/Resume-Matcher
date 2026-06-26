@@ -14,6 +14,16 @@ BOLD='\033[1m'
 FRONTEND_PORT="3000"
 BACKEND_PORT="8000"
 
+# Ollama Configuration
+OLLAMA_HOST="127.0.0.1:11434"
+OLLAMA_MODELS_DIR="/app/ollama/models"
+
+# Default models required by Resume Matcher
+REQUIRED_MODELS=(
+    "qwen2.5:7b"
+    "nomic-embed-text"
+)
+
 # Print banner
 print_banner() {
     echo -e "${CYAN}"
@@ -114,6 +124,12 @@ cleanup() {
     echo "" >&2
     info "Shutting down Resume Matcher..."
 
+    # Kill Ollama if running
+    if [ -n "$OLLAMA_PID" ] && kill -0 "$OLLAMA_PID" 2>/dev/null; then
+        kill "$OLLAMA_PID" 2>/dev/null || true
+        wait "$OLLAMA_PID" 2>/dev/null || true
+    fi
+
     # Kill frontend if running
     if [ -n "$FRONTEND_PID" ] && kill -0 "$FRONTEND_PID" 2>/dev/null; then
         kill "$FRONTEND_PID" 2>/dev/null || true
@@ -131,6 +147,7 @@ cleanup() {
 }
 
 # Initialize PIDs so cleanup doesn't fail on early exit
+OLLAMA_PID=""
 BACKEND_PID=""
 FRONTEND_PID=""
 
@@ -139,6 +156,14 @@ trap cleanup SIGTERM SIGINT SIGQUIT
 
 # Print banner
 print_banner
+
+info "Runtime Information:"
+echo "  Python          : $(python --version)"
+echo "  Node            : $(node --version)"
+echo "  Ollama          : $(ollama --version)"
+echo "  Data Directory  : ${DATA_DIR:-/app/backend/data}"
+echo "  Models Directory: ${OLLAMA_MODELS_DIR}"
+echo ""
 
 # Display routing configuration
 info "Routing configuration:"
@@ -200,6 +225,63 @@ else
     status "Playwright setup complete"
 fi
 
+# ============================================
+# Ollama Runtime
+# ============================================
+
+echo ""
+info "Starting Ollama server..."
+
+export OLLAMA_MODELS="${OLLAMA_MODELS_DIR}"
+
+trap '' SIGTERM SIGINT SIGQUIT
+ollama serve &
+OLLAMA_PID=$!
+trap cleanup SIGTERM SIGINT SIGQUIT
+
+info "Waiting for Ollama to become ready..."
+
+for i in {1..30}; do
+    if curl -fs "http://${OLLAMA_HOST}/api/tags" >/dev/null 2>&1; then
+        status "Ollama server is ready (PID: $OLLAMA_PID)"
+        break
+    fi
+
+    if ! kill -0 "$OLLAMA_PID" 2>/dev/null; then
+        error "Ollama server died during startup"
+        exit 1
+    fi
+
+    if [ "$i" -eq 30 ]; then
+        error "Ollama failed to start within 30 seconds"
+        exit 1
+    fi
+
+    sleep 1
+done
+
+echo ""
+info "Checking required models..."
+
+INSTALLED_MODELS="$(ollama list | awk '{print $1}')"
+
+echo ""
+info "Installed Ollama models:"
+echo "$INSTALLED_MODELS"
+echo ""
+
+for model in "${REQUIRED_MODELS[@]}"; do
+    if echo "$INSTALLED_MODELS" | grep -Fxq "$model"; then
+        status "$model already installed"
+    else
+        warn "$model not found. Downloading..."
+        ollama pull "$model"
+        status "$model downloaded successfully"
+    fi
+done
+
+
+
 # Start backend
 echo ""
 info "Starting backend server on internal port ${BACKEND_PORT}..."
@@ -245,6 +327,16 @@ node server.js "$@" &
 FRONTEND_PID=$!
 trap cleanup SIGTERM SIGINT SIGQUIT
 status "Frontend is running (PID: $FRONTEND_PID)"
+
+echo ""
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN} Resume Matcher is ready!${NC}"
+echo ""
+echo "Frontend : http://localhost:${FRONTEND_PORT}"
+echo "Backend  : http://127.0.0.1:${BACKEND_PORT}"
+echo "Ollama   : http://${OLLAMA_HOST}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
 
 # Wait for either process to exit, but ignore errexit for this wait
 set +e

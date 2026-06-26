@@ -6,7 +6,11 @@ services:
     ports:
       - "${PORT:-3000}:3000"
     volumes:
+      # TinyDB, config.json, uploads
       - resume-data:/app/backend/data
+
+      # Ollama models (persistent across container recreation)
+      - ollama-models:/app/ollama/models
     #secrets:
     #  - llm_api_key
     environment:
@@ -39,4 +43,7 @@ services:
 
 volumes:
   resume-data:
+    driver: local
+
+  ollama-models:
     driver: local

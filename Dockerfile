@@ -43,6 +43,7 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    zstd \
     # Playwright dependencies
     libnss3 \
     libnspr4 \
@@ -63,7 +64,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgtk-3-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# ============================================
+# Install Ollama
+# ============================================
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+RUN ollama --version
+
 WORKDIR /app
+
+# Create Ollama model directory
+RUN mkdir -p /app/ollama/models
 
 # Copy Node.js runtime from frontend builder for reproducible runtime behavior.
 COPY --from=frontend-builder /usr/local/bin/node /usr/local/bin/node
