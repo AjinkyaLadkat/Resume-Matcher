@@ -333,7 +333,7 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN} Resume Matcher is ready!${NC}"
 echo ""
 echo "Frontend : http://localhost:${FRONTEND_PORT}"
-echo "Backend  : http://127.0.0.1:${BACKEND_PORT}"
+echo "Backend  : Internal (proxied via /api)"
 echo "Ollama   : http://${OLLAMA_HOST}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
