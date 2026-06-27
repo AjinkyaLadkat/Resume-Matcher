@@ -263,7 +263,7 @@ done
 echo ""
 info "Checking required models..."
 
-INSTALLED_MODELS="$(ollama list | awk '{print $1}')"
+INSTALLED_MODELS="$(ollama list | awk 'NR>1 {sub(/:latest$/, "", $1); print $1}')"
 
 echo ""
 info "Installed Ollama models:"
